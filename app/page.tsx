@@ -1,7 +1,14 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/utils/supabase";
-import { useRouter } from "next/navigation";
+
+// 🚨 ATENÇÃO: DESCOMENTE AS DUAS LINHAS ABAIXO NO SEU VS CODE 🚨
+// import { supabase } from "@/utils/supabase";
+// import { useRouter } from "next/navigation";
+
+// 👇 APAGUE ESTE BLOCO NO SEU VS CODE (É APENAS PARA O PREVIEW AQUI) 👇
+const supabase = { auth: { getUser: async () => ({ data: { user: { id: '1' } } }), signOut: async () => Promise.resolve() }, from: () => ({ select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert: async () => ({ error: null }) }) } as any;
+const useRouter = () => ({ push: () => {} });
+// 👆 APAGUE ESTE BLOCO NO SEU VS CODE 👆
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -91,16 +98,31 @@ export default function Home() {
   };
 
   // Salvar no Supabase
-  const handleConfirmar = async (e?: React.FormEvent) => {
+  const handleConfirmar = async (e?: React.FormEvent | React.MouseEvent | React.TouchEvent) => {
     if (e) e.preventDefault(); // Impede o iPhone de recarregar a tela perdendo os dados
 
-    if (!valor || !categoria || !userData) {
-      alert("Por favor, preencha o valor e escolha uma categoria.");
+    // 1. Validação isolada de Usuário (Pode ser o culpado no celular)
+    if (!userData) {
+      alert("Alerta iOS [Perfil]: O seu perfil não carregou. Atualize a página e tente novamente.");
+      return;
+    }
+
+    // 2. Validação isolada de Categoria
+    if (!categoria) {
+      alert("Alerta iOS [Categoria]: Toque em uma categoria antes de confirmar.");
+      return;
+    }
+
+    // 3. Validação Matemática Blindada para iOS (lida com espaços invisíveis em pt-BR)
+    const digitos = String(valor).replace(/\D/g, "");
+    const valorNumerico = Number(digitos) / 100;
+
+    if (!valor || isNaN(valorNumerico) || valorNumerico <= 0) {
+      alert(`Alerta iOS [Valor]: O valor lido pelo iPhone foi R$ ${valorNumerico}. Digite um valor válido.`);
       return;
     }
 
     setIsSaving(true);
-    const valorNumerico = parseFloat(valor.replace(/\./g, "").replace(",", "."));
 
     const { error } = await supabase.from("transactions").insert({
       family_id: userData.familyId,
@@ -257,12 +279,18 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Botão Confirmar */}
-            <button type="submit" disabled={isSaving} className={`w-full text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all ${isSaving ? 'bg-neutral-600 cursor-not-allowed' : (tipo === 'income' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-500 hover:bg-orange-400')}`}>
+            {/* Botão Confirmar (Forçado como type="button" e com eventos extras para o Safari) */}
+            <button 
+              type="button" 
+              onClick={handleConfirmar}
+              onTouchEnd={(e) => { e.preventDefault(); handleConfirmar(e); }}
+              disabled={isSaving} 
+              className={`w-full text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all ${isSaving ? 'bg-neutral-600 cursor-not-allowed' : (tipo === 'income' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-500 hover:bg-orange-400')}`}
+            >
               {isSaving ? "Processando..." : "Confirmar"}
             </button>
 
-          </form>
+          </div>
         </div>
       )}
     </main>
