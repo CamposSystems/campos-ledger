@@ -1,7 +1,29 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/utils/supabase";
-import { useRouter } from "next/navigation";
+
+// 👇 IMPORTAÇÕES REAIS (MANTENHA ATIVAS NO SEU VS CODE) 👇
+// import { supabase } from "@/utils/supabase";
+// import { useRouter } from "next/navigation";
+
+// 👇 SIMULAÇÃO APENAS PARA ESTA TELA (NÃO COPIE ESTA PARTE PARA O VS CODE) 👇
+const supabase = { 
+  auth: { 
+    getUser: async () => ({ data: { user: { id: '1' } }, error: null }),
+    getSession: async () => ({ data: { session: {} }, error: null }),
+    signOut: async () => Promise.resolve() 
+  }, 
+  from: () => ({ 
+    select: () => ({ 
+      eq: () => ({ 
+        limit: async () => ({ data: [{ id: '1', family_id: '1', full_name: 'Usuário Teste' }], error: null }),
+        order: () => ({ limit: async () => ({ data: [], error: null }) }) 
+      }) 
+    }), 
+    insert: async () => ({ error: null }) 
+  }) 
+} as any;
+const useRouter = () => ({ push: () => {} });
+// 👆 FIM DA SIMULAÇÃO 👆
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -78,8 +100,9 @@ export default function Home() {
         const profile = profileData && profileData.length > 0 ? profileData[0] : null;
 
         if (!profile) {
-          alert("Aviso: O seu utilizador existe, mas não tem um perfil associado na base de dados.");
-          setIsLoading(false);
+          alert("Aviso: Esta conta não possui um perfil financeiro. Provavelmente você logou com um e-mail/conta diferente do PC. Vamos voltar para o Login.");
+          await supabase.auth.signOut();
+          router.push("/login");
           return;
         }
           
