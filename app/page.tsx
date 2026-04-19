@@ -1,14 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-
-// 🚨 ATENÇÃO: DESCOMENTE AS DUAS LINHAS ABAIXO NO SEU VS CODE 🚨
-// import { supabase } from "@/utils/supabase";
-// import { useRouter } from "next/navigation";
-
-// 👇 APAGUE ESTE BLOCO NO SEU VS CODE (É APENAS PARA O PREVIEW AQUI) 👇
-const supabase = { auth: { getUser: async () => ({ data: { user: { id: '1' } } }), signOut: async () => Promise.resolve() }, from: () => ({ select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert: async () => ({ error: null }) }) } as any;
-const useRouter = () => ({ push: () => {} });
-// 👆 APAGUE ESTE BLOCO NO SEU VS CODE 👆
+import { supabase } from "@/utils/supabase";
+import { useRouter } from "next/navigation";
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -232,10 +225,7 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
           
-          <form 
-            onSubmit={handleConfirmar} 
-            className="relative w-full max-w-md bg-neutral-900 border-t border-neutral-800 rounded-t-3xl sm:rounded-3xl p-6 pb-12 shadow-2xl"
-          >
+          <div className="relative w-full max-w-md bg-neutral-900 border-t border-neutral-800 rounded-t-3xl sm:rounded-3xl p-6 pb-12 shadow-2xl">
             
             {/* Toggle Receita/Despesa */}
             <div className="flex justify-between items-center mb-8">
@@ -246,7 +236,7 @@ export default function Home() {
               <button type="button" onClick={() => setIsModalOpen(false)} className="text-neutral-500 p-2 text-xl hover:text-white">✕</button>
             </div>
 
-            {/* Input de Valor (Agora não trava!) */}
+            {/* Input de Valor */}
             <div className="flex flex-col items-center justify-center mb-8">
               <p className="text-neutral-400 text-sm mb-2">{tipo === 'expense' ? 'Valor da despesa' : 'Valor da receita'}</p>
               <div className="flex items-center justify-center text-5xl font-light">
