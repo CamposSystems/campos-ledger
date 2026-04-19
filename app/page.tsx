@@ -1,7 +1,30 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/utils/supabase";
-import { useRouter } from "next/navigation";
+
+// 🚨 ATENÇÃO: NO SEU VS CODE, DESCOMENTE AS SUAS IMPORTAÇÕES REAIS ABAIXO 🚨
+// import { supabase } from "@/utils/supabase";
+// import { useRouter } from "next/navigation";
+
+// 👇 APAGUE ESTE BLOCO DE SIMULAÇÃO NO SEU VS CODE 👇
+// (Este bloco serve apenas para evitar que o ambiente virtual trave)
+const supabase = { 
+  auth: { 
+    getUser: async () => ({ data: { user: { id: '1' } }, error: null }),
+    getSession: async () => ({ data: { session: {} }, error: null }),
+    signOut: async () => Promise.resolve() 
+  }, 
+  from: () => ({ 
+    select: () => ({ 
+      eq: () => ({ 
+        single: async () => ({ data: { id: '1', family_id: '1', full_name: 'Usuário Teste' }, error: null }),
+        order: () => ({ limit: async () => ({ data: [], error: null }) }) 
+      }) 
+    }), 
+    insert: async () => ({ error: null }) 
+  }) 
+} as any;
+const useRouter = () => ({ push: () => {} });
+// 👆 APAGUE ESTE BLOCO DE SIMULAÇÃO NO SEU VS CODE 👆
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -50,28 +73,51 @@ export default function Home() {
   // Ao carregar a tela, verifica login e busca os dados
   useEffect(() => {
     const inicializarSistema = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, family_id, full_name")
-        .eq("id", user.id)
-        .single();
+      try {
+        // Tentativa de forçar a atualização da sessão para evitar bugs do Safari no iOS
+        await supabase.auth.getSession();
         
-      if (profile) {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+          router.push("/login");
+          return;
+        }
+        
+        // Busca o perfil com verificação de erros detalhada
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, family_id, full_name")
+          .eq("id", user.id)
+          .single();
+          
+        if (profileError) {
+          // Alerta imediato se o banco de dados falhar no carregamento inicial
+          alert(`Erro Supabase (iOS): Não foi possível carregar o perfil. Motivo: ${profileError.message}`);
+          setIsLoading(false);
+          return;
+        }
+
+        if (!profile) {
+          alert("Aviso: O seu utilizador existe, mas não tem um perfil associado na base de dados.");
+          setIsLoading(false);
+          return;
+        }
+          
         setUserData({ 
           familyId: profile.family_id, 
           profileId: profile.id,
           nome: profile.full_name || "Usuário"
         });
+        
         await buscarTransacoes(profile.family_id);
+        setIsLoading(false);
+      } catch (err: any) {
+        alert(`Erro Inesperado: ${err.message}`);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
+    
     inicializarSistema();
   }, [router, buscarTransacoes]);
 
@@ -94,9 +140,9 @@ export default function Home() {
   const handleConfirmar = async (e?: React.FormEvent | React.MouseEvent | React.TouchEvent) => {
     if (e) e.preventDefault(); // Impede o iPhone de recarregar a tela perdendo os dados
 
-    // 1. Validação isolada de Usuário (Pode ser o culpado no celular)
+    // 1. Validação isolada de Usuário
     if (!userData) {
-      alert("Alerta iOS [Perfil]: O seu perfil não carregou. Atualize a página e tente novamente.");
+      alert("Alerta iOS [Perfil]: O seu perfil não carregou corretamente. Por favor, feche a aba, abra uma nova e tente novamente.");
       return;
     }
 
@@ -106,7 +152,7 @@ export default function Home() {
       return;
     }
 
-    // 3. Validação Matemática Blindada para iOS (lida com espaços invisíveis em pt-BR)
+    // 3. Validação Matemática Blindada para iOS
     const digitos = String(valor).replace(/\D/g, "");
     const valorNumerico = Number(digitos) / 100;
 
@@ -155,7 +201,7 @@ export default function Home() {
   };
 
   if (isLoading) {
-    return <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center">Carregando...</div>;
+    return <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center">A carregar o seu perfil...</div>;
   }
 
   return (
@@ -166,7 +212,7 @@ export default function Home() {
         <header className="flex justify-between items-center">
           <div>
             <h1 className="text-gray-400 text-sm font-medium tracking-wider uppercase">Camp.OS Ledger</h1>
-            <p className="text-2xl font-semibold mt-1 capitalize">Olá, {userData?.nome.split(".")[0]} 👋</p>
+            <p className="text-2xl font-semibold mt-1 capitalize">Olá, {userData?.nome.split(".")[0] || "Visitante"} 👋</p>
           </div>
           <div 
             className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center cursor-pointer hover:bg-neutral-700 transition-colors" 
@@ -269,7 +315,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Botão Confirmar (Forçado como type="button" e com eventos extras para o Safari) */}
+            {/* Botão Confirmar */}
             <button 
               type="button" 
               onClick={handleConfirmar}
