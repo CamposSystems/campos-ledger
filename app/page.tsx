@@ -61,18 +61,21 @@ export default function Home() {
           return;
         }
         
-        // Busca o perfil com verificação de erros detalhada
-        const { data: profile, error: profileError } = await supabase
+        // CORREÇÃO AQUI: Trocamos o .single() por .limit(1) para evitar o erro "Cannot coerce..."
+        const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("id, family_id, full_name")
           .eq("id", user.id)
-          .single();
+          .limit(1); 
           
         if (profileError) {
           alert(`Erro Supabase (iOS): Não foi possível carregar o perfil. Motivo: ${profileError.message}`);
           setIsLoading(false);
           return;
         }
+
+        // Pega o primeiro perfil com segurança, se ele existir
+        const profile = profileData && profileData.length > 0 ? profileData[0] : null;
 
         if (!profile) {
           alert("Aviso: O seu utilizador existe, mas não tem um perfil associado na base de dados.");
