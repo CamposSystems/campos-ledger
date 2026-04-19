@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-// 👇 IMPORTAÇÕES REAIS (MANTENHA ATIVAS NO SEU VS CODE) 👇
+// 🚨 ATENÇÃO: DESCOMENTE AS DUAS LINHAS ABAIXO NO SEU VS CODE 🚨
 // import { supabase } from "@/utils/supabase";
 // import { useRouter } from "next/navigation";
 
-// 👇 SIMULAÇÃO APENAS PARA ESTA TELA (NÃO COPIE ESTA PARTE PARA O VS CODE) 👇
+// 👇 APAGUE ESTE BLOCO NO SEU VS CODE (É APENAS PARA O PREVIEW AQUI NÃO TRAVAR) 👇
 const supabase = { 
   auth: { 
     getUser: async () => ({ data: { user: { id: '1' } }, error: null }),
@@ -23,7 +23,7 @@ const supabase = {
   }) 
 } as any;
 const useRouter = () => ({ push: () => {} });
-// 👆 FIM DA SIMULAÇÃO 👆
+// 👆 APAGUE ESTE BLOCO NO SEU VS CODE 👆
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -52,20 +52,24 @@ export default function Home() {
 
   // Função para buscar as transações reais na nuvem
   const buscarTransacoes = useCallback(async (familyId: string) => {
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("family_id", familyId)
-      .order("date", { ascending: false })
-      .limit(10); // Traz as últimas 10
+    try {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("family_id", familyId)
+        .order("date", { ascending: false })
+        .limit(10); // Traz as últimas 10
 
-    if (!error && data) {
-      setTransacoes(data);
-      // Calcula o saldo somando receitas e subtraindo despesas
-      const saldoCalculado = data.reduce((acc, atual) => {
-        return atual.type === "income" ? acc + atual.amount : acc - atual.amount;
-      }, 0);
-      setSaldo(saldoCalculado);
+      if (!error && data) {
+        setTransacoes(data);
+        // Calcula o saldo somando receitas e subtraindo despesas
+        const saldoCalculado = data.reduce((acc, atual) => {
+          return atual.type === "income" ? acc + atual.amount : acc - atual.amount;
+        }, 0);
+        setSaldo(saldoCalculado);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar transações:", err);
     }
   }, []);
 
@@ -83,7 +87,6 @@ export default function Home() {
           return;
         }
         
-        // CORREÇÃO AQUI: Trocamos o .single() por .limit(1) para evitar o erro "Cannot coerce..."
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("id, family_id, full_name")
@@ -113,9 +116,9 @@ export default function Home() {
         });
         
         await buscarTransacoes(profile.family_id);
-        setIsLoading(false);
       } catch (err: any) {
         alert(`Erro Inesperado: ${err.message}`);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -139,52 +142,54 @@ export default function Home() {
     setValor(valorFormatado);
   };
 
-  // Salvar no Supabase
-  const handleConfirmar = async (e?: React.FormEvent | React.MouseEvent | React.TouchEvent) => {
+  // Salvar no Supabase de verdade
+  const handleConfirmar = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault(); // Impede o iPhone de recarregar a tela perdendo os dados
 
-    // 1. Validação isolada de Usuário
     if (!userData) {
-      alert("Alerta iOS [Perfil]: O seu perfil não carregou corretamente. Por favor, feche a aba, abra uma nova e tente novamente.");
+      alert("Alerta iOS [Perfil]: O seu perfil não carregou corretamente. Atualize a página.");
       return;
     }
 
-    // 2. Validação isolada de Categoria
     if (!categoria) {
       alert("Alerta iOS [Categoria]: Toque em uma categoria antes de confirmar.");
       return;
     }
 
-    // 3. Validação Matemática Blindada para iOS
     const digitos = String(valor).replace(/\D/g, "");
     const valorNumerico = Number(digitos) / 100;
 
     if (!valor || isNaN(valorNumerico) || valorNumerico <= 0) {
-      alert(`Alerta iOS [Valor]: O valor lido pelo iPhone foi R$ ${valorNumerico}. Digite um valor válido.`);
+      alert(`Alerta iOS [Valor]: O valor lido pelo sistema foi R$ ${valorNumerico}. Digite um valor válido.`);
       return;
     }
 
     setIsSaving(true);
 
-    const { error } = await supabase.from("transactions").insert({
-      family_id: userData.familyId,
-      profile_id: userData.profileId,
-      amount: valorNumerico,
-      type: tipo,
-      category: categoria,
-      date: new Date().toISOString()
-    });
+    try {
+      const { error } = await supabase.from("transactions").insert({
+        family_id: userData.familyId,
+        profile_id: userData.profileId,
+        amount: valorNumerico,
+        type: tipo,
+        category: categoria,
+        date: new Date().toISOString()
+      });
 
-    setIsSaving(false);
+      if (error) throw error; // Se a nuvem recusar, jogamos para o catch abaixo
 
-    if (error) {
-      alert("Erro ao salvar: " + error.message);
-    } else {
+      // Limpa os campos e fecha a janela APENAS se salvou com sucesso na nuvem
       setIsModalOpen(false);
       setValor("");
       setCategoria("");
+      
       // Atualiza a lista na mesma hora
-      buscarTransacoes(userData.familyId);
+      await buscarTransacoes(userData.familyId);
+
+    } catch (error: any) {
+      alert("Erro ao salvar no banco de dados: " + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -322,7 +327,6 @@ export default function Home() {
             <button 
               type="button" 
               onClick={handleConfirmar}
-              onTouchEnd={(e) => { e.preventDefault(); handleConfirmar(e); }}
               disabled={isSaving} 
               className={`w-full text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all ${isSaving ? 'bg-neutral-600 cursor-not-allowed' : (tipo === 'income' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-500 hover:bg-orange-400')}`}
             >
