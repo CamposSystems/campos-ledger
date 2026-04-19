@@ -91,7 +91,9 @@ export default function Home() {
   };
 
   // Salvar no Supabase
-  const handleConfirmar = async () => {
+  const handleConfirmar = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault(); // Impede o iPhone de recarregar a tela perdendo os dados
+
     if (!valor || !categoria || !userData) {
       alert("Por favor, preencha o valor e escolha uma categoria.");
       return;
@@ -170,7 +172,7 @@ export default function Home() {
         </section>
 
         {/* Botão de Ação */}
-        <button onClick={() => setIsModalOpen(true)} className="w-full bg-white text-black text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all">
+        <button type="button" onClick={() => setIsModalOpen(true)} className="w-full bg-white text-black text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all">
           + Lançar Movimentação
         </button>
 
@@ -208,15 +210,18 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
           
-          <div className="relative w-full max-w-md bg-neutral-900 border-t border-neutral-800 rounded-t-3xl sm:rounded-3xl p-6 pb-12 shadow-2xl">
+          <form 
+            onSubmit={handleConfirmar} 
+            className="relative w-full max-w-md bg-neutral-900 border-t border-neutral-800 rounded-t-3xl sm:rounded-3xl p-6 pb-12 shadow-2xl"
+          >
             
             {/* Toggle Receita/Despesa */}
             <div className="flex justify-between items-center mb-8">
               <div className="flex gap-2 bg-neutral-800 p-1 rounded-lg">
-                <button onClick={() => setTipo('expense')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'expense' ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400'}`}>Despesa</button>
-                <button onClick={() => setTipo('income')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'income' ? 'bg-green-600 text-white shadow' : 'text-neutral-400'}`}>Receita</button>
+                <button type="button" onClick={() => setTipo('expense')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'expense' ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400'}`}>Despesa</button>
+                <button type="button" onClick={() => setTipo('income')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'income' ? 'bg-green-600 text-white shadow' : 'text-neutral-400'}`}>Receita</button>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-neutral-500 p-2 text-xl hover:text-white">✕</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="text-neutral-500 p-2 text-xl hover:text-white">✕</button>
             </div>
 
             {/* Input de Valor (Agora não trava!) */}
@@ -238,26 +243,26 @@ export default function Home() {
 
             {/* Categorias */}
             <div className="grid grid-cols-4 gap-3 mb-8">
-              <button onClick={() => setCategoria('lanche')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'lanche' ? 'bg-neutral-800 border-orange-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
+              <button type="button" onClick={() => setCategoria('lanche')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'lanche' ? 'bg-neutral-800 border-orange-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
                 <span className="text-2xl">🍔</span><span className={`text-xs ${categoria === 'lanche' ? 'text-white' : 'text-neutral-400'}`}>Lanche</span>
               </button>
-              <button onClick={() => setCategoria('carro')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'carro' ? 'bg-neutral-800 border-blue-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
+              <button type="button" onClick={() => setCategoria('carro')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'carro' ? 'bg-neutral-800 border-blue-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
                 <span className="text-2xl">🚗</span><span className={`text-xs ${categoria === 'carro' ? 'text-white' : 'text-neutral-400'}`}>Carro</span>
               </button>
-              <button onClick={() => setCategoria('mercado')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'mercado' ? 'bg-neutral-800 border-green-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
+              <button type="button" onClick={() => setCategoria('mercado')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'mercado' ? 'bg-neutral-800 border-green-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
                 <span className="text-2xl">🛒</span><span className={`text-xs ${categoria === 'mercado' ? 'text-white' : 'text-neutral-400'}`}>Mercado</span>
               </button>
-              <button onClick={() => setCategoria('outros')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'outros' ? 'bg-neutral-800 border-purple-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
+              <button type="button" onClick={() => setCategoria('outros')} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${categoria === 'outros' ? 'bg-neutral-800 border-purple-500' : 'bg-neutral-800/50 border-transparent hover:bg-neutral-800'}`}>
                 <span className="text-2xl">➕</span><span className={`text-xs ${categoria === 'outros' ? 'text-white' : 'text-neutral-400'}`}>Outros</span>
               </button>
             </div>
 
             {/* Botão Confirmar */}
-            <button onClick={handleConfirmar} disabled={isSaving} className={`w-full text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all ${isSaving ? 'bg-neutral-600 cursor-not-allowed' : (tipo === 'income' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-500 hover:bg-orange-400')}`}>
+            <button type="submit" disabled={isSaving} className={`w-full text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-all ${isSaving ? 'bg-neutral-600 cursor-not-allowed' : (tipo === 'income' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-500 hover:bg-orange-400')}`}>
               {isSaving ? "Processando..." : "Confirmar"}
             </button>
 
-          </div>
+          </form>
         </div>
       )}
     </main>
