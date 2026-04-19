@@ -1,30 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-
-// 🚨 ATENÇÃO: NO SEU VS CODE, DESCOMENTE AS SUAS IMPORTAÇÕES REAIS ABAIXO 🚨
-// import { supabase } from "@/utils/supabase";
-// import { useRouter } from "next/navigation";
-
-// 👇 APAGUE ESTE BLOCO DE SIMULAÇÃO NO SEU VS CODE 👇
-// (Este bloco serve apenas para evitar que o ambiente virtual trave)
-const supabase = { 
-  auth: { 
-    getUser: async () => ({ data: { user: { id: '1' } }, error: null }),
-    getSession: async () => ({ data: { session: {} }, error: null }),
-    signOut: async () => Promise.resolve() 
-  }, 
-  from: () => ({ 
-    select: () => ({ 
-      eq: () => ({ 
-        single: async () => ({ data: { id: '1', family_id: '1', full_name: 'Usuário Teste' }, error: null }),
-        order: () => ({ limit: async () => ({ data: [], error: null }) }) 
-      }) 
-    }), 
-    insert: async () => ({ error: null }) 
-  }) 
-} as any;
-const useRouter = () => ({ push: () => {} });
-// 👆 APAGUE ESTE BLOCO DE SIMULAÇÃO NO SEU VS CODE 👆
+import { supabase } from "@/utils/supabase";
+import { useRouter } from "next/navigation";
 
 // Define o formato da transação para evitar erros
 interface Transacao {
@@ -92,7 +69,6 @@ export default function Home() {
           .single();
           
         if (profileError) {
-          // Alerta imediato se o banco de dados falhar no carregamento inicial
           alert(`Erro Supabase (iOS): Não foi possível carregar o perfil. Motivo: ${profileError.message}`);
           setIsLoading(false);
           return;
@@ -119,7 +95,8 @@ export default function Home() {
     };
     
     inicializarSistema();
-  }, [router, buscarTransacoes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // <-- ARRAY VAZIO: Garante que o useEffect rode apenas 1 vez e impede o travamento da tela!
 
   // Função BLINDADA para formatar moeda sem travar a digitação
   const handleValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
