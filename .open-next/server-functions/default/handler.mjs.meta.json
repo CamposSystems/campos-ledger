@@ -5480,7 +5480,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/open-next.config.mjs": {
-      "bytes": 6832,
+      "bytes": 616,
       "imports": [],
       "format": "esm"
     },
@@ -6063,7 +6063,7 @@
           "bytesInOutput": 450
         },
         ".open-next/server-functions/default/node_modules/react/cjs/react.production.js": {
-          "bytesInOutput": 12930
+          "bytesInOutput": 12945
         },
         ".open-next/server-functions/default/node_modules/react/index.js": {
           "bytesInOutput": 170
@@ -6225,7 +6225,7 @@
           "bytesInOutput": 825
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/config-shared.js": {
-          "bytesInOutput": 8546
+          "bytesInOutput": 8584
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/lib/is-ipv6.js": {
           "bytesInOutput": 936
@@ -6528,7 +6528,7 @@
           "bytesInOutput": 492
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/lib/i18n-provider.js": {
-          "bytesInOutput": 2614
+          "bytesInOutput": 2619
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/send-response.js": {
           "bytesInOutput": 1278
@@ -6567,7 +6567,7 @@
           "bytesInOutput": 911
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/lib/experimental/ppr.js": {
-          "bytesInOutput": 684
+          "bytesInOutput": 693
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/after/builtin-request-context.js": {
           "bytesInOutput": 909
@@ -6777,7 +6777,7 @@
           "bytesInOutput": 13745
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/setup-http-agent-env.js": {
-          "bytesInOutput": 853
+          "bytesInOutput": 858
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/route-matches/pages-api-route-match.js": {
           "bytesInOutput": 483
@@ -6828,10 +6828,10 @@
           "bytesInOutput": 249
         },
         ".open-next/server-functions/default/composable-cache.cjs": {
-          "bytesInOutput": 6635
+          "bytesInOutput": 6638
         },
         ".open-next/server-functions/default/cache.cjs": {
-          "bytesInOutput": 13441
+          "bytesInOutput": 13444
         },
         ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.prod.js": {
           "bytesInOutput": 659652
@@ -6861,7 +6861,7 @@
           "bytesInOutput": 434
         },
         ".open-next/server-functions/default/node_modules/react/cjs/react-jsx-runtime.production.js": {
-          "bytesInOutput": 740
+          "bytesInOutput": 750
         },
         ".open-next/server-functions/default/node_modules/react/jsx-runtime.js": {
           "bytesInOutput": 194
@@ -6897,7 +6897,7 @@
           "bytesInOutput": 577
         },
         ".open-next/server-functions/default/node_modules/next/dist/lib/static-env.js": {
-          "bytesInOutput": 1808
+          "bytesInOutput": 1817
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/lib/module-loader/node-module-loader.js": {
           "bytesInOutput": 382
@@ -6906,7 +6906,7 @@
           "bytesInOutput": 599
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/node-environment-extensions/global-behaviors.js": {
-          "bytesInOutput": 729
+          "bytesInOutput": 731
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/lib/router-utils/is-postpone.js": {
           "bytesInOutput": 477
@@ -6930,13 +6930,13 @@
           "bytesInOutput": 27891
         },
         ".open-next/server-functions/default/open-next.config.mjs": {
-          "bytesInOutput": 5074
+          "bytesInOutput": 633
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 58149
+          "bytesInOutput": 58143
         }
       },
-      "bytes": 2016256
+      "bytes": 2011908
     }
   }
 }

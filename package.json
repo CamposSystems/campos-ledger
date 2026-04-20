@@ -1,24 +1,23 @@
 {
   "name": "app-ledger",
   "version": "0.1.0",
-  "description": "Sistema de controle financeiro familiar",
+  "description": "Sistema de controlo financeiro familiar",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "cf:build": "npx @opennextjs/cloudflare build",
     "deploy": "npx @opennextjs/cloudflare deploy",
     "preview": "npx @opennextjs/cloudflare preview",
     "lint": "next lint"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.19.2",
     "@supabase/supabase-js": "^2.103.3",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.19.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
