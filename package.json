@@ -1,6 +1,7 @@
 {
   "name": "app-ledger",
   "version": "0.1.0",
+  "description": "Controle financeiro",
   "private": true,
   "scripts": {
     "dev": "next dev",
