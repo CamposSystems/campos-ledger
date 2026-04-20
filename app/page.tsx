@@ -63,9 +63,9 @@ export default function Home() {
       if (!error && data) {
         setTransacoes(data);
         // Calcula o saldo somando receitas e subtraindo despesas
-        const saldoCalculado = data.reduce((acc, atual) => {
-          return atual.type === "income" ? acc + atual.amount : acc - atual.amount;
-        }, 0);
+        const saldoCalculado = data.reduce((acc: number, atual: Transacao) => {
+  return atual.type === "income" ? acc + atual.amount : acc - atual.amount;
+}, 0);
         setSaldo(saldoCalculado);
       }
     } catch (err) {
