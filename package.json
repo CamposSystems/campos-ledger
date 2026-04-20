@@ -4,13 +4,13 @@
   "description": "Sistema de controle financeiro familiar",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "cf:build": "npx @opennextjs/cloudflare build",
-  "deploy": "npx @opennextjs/cloudflare deploy",
-  "preview": "npx @opennextjs/cloudflare preview",
-  "lint": "next lint"
-}
+    "dev": "next dev",
+    "build": "next build",
+    "cf:build": "npx @opennextjs/cloudflare build",
+    "deploy": "npx @opennextjs/cloudflare deploy",
+    "preview": "npx @opennextjs/cloudflare preview",
+    "lint": "next lint"
+  },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.2",
     "@supabase/supabase-js": "^2.103.3",
