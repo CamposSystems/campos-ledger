@@ -1,7 +1,5 @@
-import defaultCloudflare from "@opennextjs/cloudflare";
-
 const config = {
-  default: defaultCloudflare,
+  default: {},
 };
 
 export default config;
