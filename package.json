@@ -3,12 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "npx @opennextjs/cloudflare build",
-  "deploy": "npx @opennextjs/cloudflare deploy",
-  "preview": "npx @opennextjs/cloudflare preview",
-  "lint": "next lint"
-}
+    "dev": "next dev",
+    "build": "npx @opennextjs/cloudflare build",
+    "deploy": "npx @opennextjs/cloudflare deploy",
+    "preview": "npx @opennextjs/cloudflare preview",
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
