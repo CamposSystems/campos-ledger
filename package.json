@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx @opennextjs/cloudflare build",
+    "build": "opennextjs-cloudflare build",
     "deploy": "npx @opennextjs/cloudflare deploy",
     "preview": "npx @opennextjs/cloudflare preview",
     "lint": "next lint"
