@@ -1,0 +1,47 @@
+[33mcommit 25802f4c3ff23ae176da11f5135a780d85bac240[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Mon Apr 20 08:50:18 2026 -0300
+
+    Simplifica config para evitar erro de TS
+
+[33mcommit 32265eeb79df2a9bdc17686d4c7290bfab17d449[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Mon Apr 20 08:48:45 2026 -0300
+
+    Corrige o ficheiro open-next.config substituindo-o pela versao exata
+
+[33mcommit ec7ce3c2baf4a8a0afbb0d68ab77604e5c9f2189[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Mon Apr 20 08:26:17 2026 -0300
+
+    Forca o envio do open-next.config
+
+[33mcommit 6fc02262cb63fe95017b2b53fe7dd6cfa0fb511f[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Mon Apr 20 08:16:50 2026 -0300
+
+    Envia o open-next.config.ts para a nuvem
+
+[33mcommit 0c8aea6577066c56d26db1fb3beeded3f2cf066f[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Mon Apr 20 08:02:42 2026 -0300
+
+    Adiciona open-next.config.ts para contornar prompt da Cloudflare
+
+[33mcommit 63c340ff41a9be5fb099c7bd6109a5dcfc7ab3d8[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Sun Apr 19 22:26:31 2026 -0300
+
+    Remove open-next config and simplify wrangler
+
+[33mcommit a3b252e7eb10e7af7f7e8134b23be2dc689e85cd[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Sun Apr 19 22:22:25 2026 -0300
+
+    Simplifica open-next config
+
+[33mcommit d96e8fd3ea27b5dbddcb200708303fc2bb0e8187[m
+Author: Charles Campos <seu-email-pessoal@gmail.com>
+Date:   Sun Apr 19 22:17:49 2026 -0300
+
+    Cria open-next.config.ts
