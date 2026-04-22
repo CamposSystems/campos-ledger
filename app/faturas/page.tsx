@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-// O erro estava aqui: faltava o ArrowRight nesta lista!
 import { ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote } from "lucide-react";
 
 /* =========================================================================
-   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
+   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE E VERCEL, USE AS IMPORTAÇÕES REAIS:
+   Descomente as duas linhas abaixo e apague o bloco MOCK a seguir.
 ========================================================================= */
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
