@@ -4584,7 +4584,7 @@
       ]
     },
     ".open-next/server-functions/default/composable-cache.cjs": {
-      "bytes": 10490,
+      "bytes": 10706,
       "imports": [
         {
           "path": "node:stream/web",
@@ -4595,7 +4595,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/cache.cjs": {
-      "bytes": 20963,
+      "bytes": 21215,
       "imports": [],
       "format": "cjs"
     },
@@ -5541,7 +5541,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 87711,
+      "bytes": 89835,
       "imports": [
         {
           "path": "node:module",
@@ -6995,10 +6995,10 @@
           "bytesInOutput": 5074
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 61005
+          "bytesInOutput": 61473
         }
       },
-      "bytes": 2049470
+      "bytes": 2049938
     }
   }
 }
