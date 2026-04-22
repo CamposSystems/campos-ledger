@@ -1,7 +1,13 @@
 "use client";
+
 import { useState } from "react";
-import { supabase } from "@/utils/supabase";
+import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+
+// Inicialização Oficial e Direta do Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Login() {
   const [email, setEmail] = useState("");
