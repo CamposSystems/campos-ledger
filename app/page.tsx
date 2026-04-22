@@ -7,51 +7,25 @@ import {
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt
+  PieChart, BrainCircuit, Receipt, AlertCircle
 } from "lucide-react";
 
-/* =========================================================
- * ⚠️ MOCK PARA O AMBIENTE VISUAL NÃO DAR ERRO.
- * (Pode ignorar esta alteração no seu VS Code)
- * ========================================================= */
-let supabase: any;
-let useRouterSafe: any;
-const mockRouter = { push: (url: string) => console.log(`Routing to: ${url}`) };
+/* =========================================================================
+   ⚠️ ATENÇÃO CHARLES: PARA O SEU VS CODE E VERCEL, DESCOMENTE AS LINHAS ABAIXO:
+========================================================================= */
+ import { createClient } from "@supabase/supabase-js";
+ import { useRouter } from "next/navigation";
 
-try {
-  const sb = require("@supabase/supabase-js");
-  const nextNav = require("next/navigation");
-  
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
-  
-  supabase = sb.createClient(supabaseUrl, supabaseAnonKey);
-  useRouterSafe = nextNav.useRouter;
-} catch (e) {
-  useRouterSafe = () => mockRouter;
-  supabase = {
-    auth: { 
-      getSession: async () => ({ data: { session: null }, error: null }),
-      signOut: async () => {} 
-    },
-    from: () => ({
-      select: () => ({ 
-        eq: () => ({ 
-          single: async () => ({ data: null, error: null }), 
-          order: async () => ({ data: [] }),
-          gte: () => ({ lte: () => ({ order: () => ({ order: async () => ({ data: [] }) }) }) })
-        }) 
-      }),
-      insert: async () => ({ error: null }),
-      update: () => ({ eq: async () => ({ error: null }) })
-    })
-  };
-}
+
+// INICIALIZAÇÃO DO SUPABASE
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 export default function Dashboard() {
-  const router = typeof useRouterSafe === 'function' ? useRouterSafe() : mockRouter;
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -83,6 +57,11 @@ export default function Dashboard() {
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split("T")[0]);
   const [installments, setInstallments] = useState("1");
   const [isPaid, setIsPaid] = useState(true);
+  
+  // Estados para o Desconto em Folha e Observações Extras
+  const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
+  const [deductionItem, setDeductionItem] = useState("");
+  const [deductionBeneficiary, setDeductionBeneficiary] = useState("");
   
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedCardId, setSelectedCardId] = useState("");
@@ -218,6 +197,12 @@ export default function Dashboard() {
     
     const parentId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'id-' + new Date().getTime();
 
+    // Formatação da observação extra (Notas do Desconto em Folha)
+    let finalNotes = null;
+    if (modalType === 'expense' && isPayrollDeduction && deductionItem) {
+      finalNotes = `Item: ${deductionItem.trim()}${deductionBeneficiary ? ` | Para: ${deductionBeneficiary.trim()}` : ''}`;
+    }
+
     const rowsToInsert = [];
     const selCard = isCredit ? creditCards.find(c => c.id === selectedCardId) : null;
 
@@ -259,7 +244,9 @@ export default function Dashboard() {
         installments_total: totalInstallments,
         parent_transaction_id: totalInstallments > 1 ? parentId : null,
         account_id: !isCredit ? selectedAccountId : null,
-        credit_card_id: isCredit ? selectedCardId : null
+        credit_card_id: isCredit ? selectedCardId : null,
+        is_payroll_deduction: modalType === 'expense' ? isPayrollDeduction : false,
+        notes: finalNotes
       };
 
       rowsToInsert.push(baseTx);
@@ -269,7 +256,8 @@ export default function Dashboard() {
            ...baseTx,
            type: 'income',
            account_id: destinationAccountId,
-           description: `${rowDesc} (Recebimento)`
+           description: `${rowDesc} (Recebimento)`,
+           notes: null
          });
       }
     }
@@ -366,12 +354,18 @@ export default function Dashboard() {
     setPaymentMethod("pix");
     setTransactionDate(new Date().toISOString().split("T")[0]);
     setIsPaid(true);
+    setIsPayrollDeduction(false);
+    setDeductionItem("");
+    setDeductionBeneficiary("");
   }
 
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
 
+  // =========================================================================
+  // CÁLCULOS PRINCIPAIS (COM LÓGICA DE PREVISÃO, DESCONTO E ALERTAS)
+  // =========================================================================
   const calculations = useMemo(() => {
     let realBalance = accounts.reduce((acc, curr) => acc + (Number(curr.initial_balance) || 0), 0);
     
@@ -386,6 +380,10 @@ export default function Dashboard() {
     let monthlyIncome = 0; 
     let monthlyExpense = 0; 
     let pendingExpense = 0;
+    let totalDeductions = 0;
+    const upcomingBills: any[] = []; // Contas a vencer nos próximos 5 dias
+    const today = new Date();
+    today.setHours(0,0,0,0);
     
     transactions.forEach(t => {
       const val = Number(t.amount) || 0;
@@ -393,15 +391,40 @@ export default function Dashboard() {
         monthlyIncome += val; 
       } else { 
         monthlyExpense += val; 
-        if (t.status === 'pending') pendingExpense += val; 
+        
+        if (t.status === 'pending') {
+          pendingExpense += val;
+          // Verificar alertas a 5 dias
+          const txDate = new Date(t.date + "T12:00:00");
+          txDate.setHours(0,0,0,0);
+          const diffTime = txDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays >= 0 && diffDays <= 5) {
+            upcomingBills.push({ ...t, diffDays });
+          }
+        } 
+        
+        if (t.is_payroll_deduction) totalDeductions += val;
       }
     });
+
+    const expectedIncome = 1500; // Valor Salarial Previsto
+    const actualIncome = monthlyIncome;
+    const difference = actualIncome - expectedIncome;
+    const isWarning = actualIncome < expectedIncome && actualIncome > 0;
 
     return { 
       realBalance,
       monthlyIncome, 
       monthlyExpense, 
-      pendingExpense 
+      pendingExpense,
+      expectedIncome,
+      actualIncome,
+      totalDeductions,
+      difference,
+      isWarning,
+      upcomingBills: upcomingBills.sort((a,b) => a.diffDays - b.diffDays)
     };
   }, [transactions, allTransactions, accounts]);
 
@@ -459,7 +482,7 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-2">
-            <button onClick={() => alert("Alertas por e-mail ativados! Receberá resumos semanais na sua caixa de entrada.")} className="p-2.5 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition" title="Ativar Alertas por E-mail">
+            <button onClick={() => alert("O envio agendado de e-mails será implementado através de rotinas CRON no Supabase numa próxima atualização estrutural.")} className="p-2.5 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition" title="Ativar Alertas por E-mail">
               <Bell className="w-5 h-5" />
             </button>
             <button onClick={() => router.push("/categorias")} className="p-2.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition" title="Gerir Categorias">
@@ -495,6 +518,30 @@ export default function Dashboard() {
         </div>
 
         <section className="space-y-3">
+          
+          {/* NOVO: ALERTA DE VENCIMENTO VISUAL A 5 DIAS */}
+          {calculations.upcomingBills.length > 0 && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 mb-4 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="w-5 h-5 text-yellow-500" />
+                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-500">Atenção! Vencimentos Próximos</h3>
+              </div>
+              <div className="space-y-2">
+                {calculations.upcomingBills.map(bill => (
+                  <div key={bill.id} className="flex justify-between items-center bg-zinc-950/50 p-2.5 rounded-xl border border-yellow-500/10">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">{bill.description}</p>
+                      <p className="text-[9px] text-yellow-400 uppercase font-medium mt-0.5">
+                        {bill.diffDays === 0 ? "Vence HOJE!" : `Vence em ${bill.diffDays} dia(s)`}
+                      </p>
+                    </div>
+                    <p className="text-sm font-black text-yellow-500 shrink-0 ml-2">R$ {Number(bill.amount).toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-zinc-900 rounded-[2rem] p-6 border border-zinc-800 relative overflow-hidden group">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
             
@@ -502,7 +549,6 @@ export default function Dashboard() {
               <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
                 <Wallet className="w-3 h-3" /> Saldo Real Consolidado
               </p>
-              {/* Botão de Ajuste Rápido escondido no hover */}
               <button 
                 onClick={() => {
                   setAdjustAccountId(accounts[0]?.id || "");
@@ -550,6 +596,27 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
+
+          {/* ALERTA DE RENDIMENTO E DESCONTOS EM FOLHA */}
+          {calculations.isWarning && (
+            <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 mt-3 animate-in fade-in zoom-in">
+              <AlertTriangle className="text-red-500 w-6 h-6 shrink-0" />
+              <div>
+                <p className="text-[11px] font-black tracking-widest text-red-400 uppercase mb-0.5">Alerta de Rendimento</p>
+                <p className="text-sm font-bold text-white tracking-tight">
+                  Previsão: R$ {maskValue(calculations.expectedIncome)} <span className="text-zinc-500 mx-1">|</span> Recebido: R$ {maskValue(calculations.actualIncome)}
+                </p>
+                <p className="text-[10px] text-red-300 font-black tracking-widest uppercase mt-1">
+                  Faltam R$ {maskValue(Math.abs(calculations.difference))} este mês!
+                </p>
+                {calculations.totalDeductions > 0 && (
+                  <p className="text-[10px] text-zinc-400 font-medium mt-1 border-t border-red-500/20 pt-1">
+                    Isso inclui R$ {maskValue(calculations.totalDeductions)} de descontos em folha.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 mt-3">
              <button onClick={() => router.push("/analytics")} className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-3xl p-4 flex flex-col items-center justify-center gap-2 transition group shadow-lg">
@@ -627,6 +694,12 @@ export default function Dashboard() {
                               <p className={`font-black text-sm truncate ${isCompleted ? 'text-zinc-100' : 'text-zinc-400'}`}>
                                 {tx.description}
                               </p>
+                              {/* EXIBE A INFORMAÇÃO DO DESCONTO EM FOLHA LOGO ABAIXO DA DESCRIÇÃO */}
+                              {tx.notes && (
+                                <p className="text-[10px] text-amber-500/80 truncate mt-0.5 font-medium">
+                                  ↳ {tx.notes}
+                                </p>
+                              )}
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'text-emerald-500' : 'text-zinc-500'}`}>
                                   {catInfo?.name || "Transferência"}
@@ -644,6 +717,11 @@ export default function Dashboard() {
                                 {tx.installments_total > 1 && (
                                   <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">
                                     {tx.installment_current}/{tx.installments_total}
+                                  </span>
+                                )}
+                                {tx.is_payroll_deduction && (
+                                  <span className="text-[8px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
+                                    Desconto em Folha
                                   </span>
                                 )}
                               </div>
@@ -740,14 +818,61 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar">
               <form id="tx-form" onSubmit={handleSaveTransaction} className="space-y-8">
                 <div className="flex bg-zinc-900 p-1.5 rounded-2xl">
-                  <button type="button" onClick={() => {setModalType("expense"); setCategoryId(""); setPaymentMethod("credit");}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "expense" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500"}`}>Despesa</button>
-                  <button type="button" onClick={() => {setModalType("income"); setCategoryId(""); setPaymentMethod("pix");}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "income" ? "bg-emerald-600 text-white shadow-md" : "text-zinc-500"}`}>Receita</button>
-                  <button type="button" onClick={() => {setModalType("transfer"); setCategoryId("transfer"); setPaymentMethod("pix");}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "transfer" ? "bg-blue-600 text-white shadow-md" : "text-zinc-500"}`}>Transf.</button>
+                  <button type="button" onClick={() => {setModalType("expense"); setCategoryId(""); setPaymentMethod("credit"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "expense" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500"}`}>Despesa</button>
+                  <button type="button" onClick={() => {setModalType("income"); setCategoryId(""); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "income" ? "bg-emerald-600 text-white shadow-md" : "text-zinc-500"}`}>Receita</button>
+                  <button type="button" onClick={() => {setModalType("transfer"); setCategoryId("transfer"); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "transfer" ? "bg-blue-600 text-white shadow-md" : "text-zinc-500"}`}>Transf.</button>
                 </div>
+                
                 <div className="flex flex-col items-center">
                   <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Valor</p>
                   <div className="flex items-end justify-center"><span className="text-3xl text-zinc-600 font-black mb-1 mr-2">R$</span><input required autoFocus type="text" inputMode="decimal" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} className={`bg-transparent text-center text-6xl font-black focus:outline-none placeholder-zinc-800 w-full max-w-[250px] ${modalType === 'income' ? 'text-emerald-400' : 'text-white'}`} /></div>
                 </div>
+
+                {/* OPÇÃO DE DESCONTO EM FOLHA COM INPUTS EXPANSÍVEIS */}
+                {modalType === "expense" && (
+                  <div className="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest">Desconto em Folha</p>
+                        <p className="text-[9px] text-zinc-500 font-medium">Debitado direto do seu salário.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={isPayrollDeduction} 
+                        onChange={(e) => setIsPayrollDeduction(e.target.checked)} 
+                        className="w-5 h-5 accent-amber-500 bg-zinc-900 border-zinc-700 rounded" 
+                      />
+                    </div>
+                    
+                    {/* Campos extras que aparecem apenas quando ativado */}
+                    {isPayrollDeduction && (
+                      <div className="pt-4 border-t border-amber-500/10 grid grid-cols-1 gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div>
+                          <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">O que foi comprado?</label>
+                          <input 
+                            type="text" 
+                            placeholder="Ex: Tênis, Ovo de Páscoa..." 
+                            value={deductionItem} 
+                            onChange={(e) => setDeductionItem(e.target.value)} 
+                            className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50 transition-colors" 
+                            required={isPayrollDeduction}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">Comprado para quem? (Opcional)</label>
+                          <input 
+                            type="text" 
+                            placeholder="Ex: João, Mãe, Colega..." 
+                            value={deductionBeneficiary} 
+                            onChange={(e) => setDeductionBeneficiary(e.target.value)} 
+                            className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50 transition-colors" 
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {modalType !== "transfer" && (
                   <div className="space-y-6 max-h-[35vh] overflow-y-auto no-scrollbar pb-4 pr-1">
                     {favoriteCats.length > 0 && (
@@ -760,11 +885,41 @@ export default function Dashboard() {
                     })}
                   </div>
                 )}
+
                 <div className="space-y-4">
                   <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Descrição (Opcional)</p><input type="text" placeholder="Ex: Almoço com a equipa" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
+                  
+                  {/* Seção de Parcelas e Data */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
+                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Parcelas</p><select disabled={modalType !== 'expense'} value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option></select></div>
+                  </div>
+
+                  {/* Seção de Meio de Pagamento */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
-                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Meio</p><select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none"><option value="pix">PIX</option><option value="debit">Débito</option>{modalType !== 'transfer' && <option value="credit">Cartão Crédito</option>}<option value="cash">Dinheiro</option></select></div>
+                    <div className="col-span-2 md:col-span-1">
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Pagar/Receber com</p>
+                      <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none">
+                        <option value="pix">PIX</option>
+                        <option value="debit">Débito</option>
+                        {modalType !== 'transfer' && <option value="credit">Cartão de Crédito</option>}
+                        <option value="cash">Dinheiro / Espécie</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{paymentMethod === 'credit' ? 'Selecione o Cartão' : 'Selecione a Conta'}</p>
+                      {paymentMethod === 'credit' ? (
+                         <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none">
+                           <option value="">Escolha um cartão...</option>
+                           {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                         </select>
+                      ) : (
+                         <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none">
+                           <option value="">Escolha uma conta...</option>
+                           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                         </select>
+                      )}
+                    </div>
                   </div>
                 </div>
               </form>

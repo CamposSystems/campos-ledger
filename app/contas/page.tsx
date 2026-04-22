@@ -7,12 +7,11 @@ import {
   X, Trash2, Pencil, ImageIcon
 } from "lucide-react";
 
-/* =========================================================
- * ⚠️ ATENÇÃO, CHARLES (PARA O VS CODE):
- * 1. DESCOMENTE as duas linhas abaixo para a Cloudflare:
- * ========================================================= */
- import { createClient } from "@supabase/supabase-js";
- import { useRouter } from "next/navigation";
+/* =========================================================================
+   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
+========================================================================= */
+import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 
 
 
@@ -29,6 +28,7 @@ export default function ContasPage() {
   
   const [accounts, setAccounts] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]); // Adicionado para saldos dinâmicos
 
   // Estados dos Modais
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -90,13 +90,15 @@ export default function ContasPage() {
 
   async function loadAssets(familyId: string) {
     try {
-      const [accRes, cardRes] = await Promise.all([
+      const [accRes, cardRes, txRes] = await Promise.all([
         supabase.from("accounts").select("*").eq("family_id", familyId).order("name"),
-        supabase.from("credit_cards").select("*").eq("family_id", familyId).order("name")
+        supabase.from("credit_cards").select("*").eq("family_id", familyId).order("name"),
+        supabase.from("transactions").select("amount, type, account_id, credit_card_id, status, payment_method").eq("family_id", familyId)
       ]);
       
       if (accRes.data) setAccounts(accRes.data);
       if (cardRes.data) setCreditCards(cardRes.data);
+      if (txRes.data) setTransactions(txRes.data);
     } catch (err) {
       console.error("Erro ao carregar ativos:", err);
     }
@@ -320,7 +322,7 @@ export default function ContasPage() {
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-10">
 
-        {/* SECÇÃO DE CONTAS */}
+        {/* SECÇÃO DE CONTAS COM SALDO DINÂMICO */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -338,39 +340,51 @@ export default function ContasPage() {
             </div>
           ) : (
             <div className="grid gap-3">
-              {accounts.map(acc => (
-                <div key={acc.id} className="bg-zinc-900 border border-zinc-800 rounded-[1.5rem] p-4 flex items-center justify-between group">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center border border-zinc-800 shrink-0 text-xl shadow-inner overflow-hidden">
-                      {acc.logo_url ? (
-                        <img src={acc.logo_url} alt={acc.name} className="w-full h-full object-cover" />
-                      ) : (
-                        acc.type === 'checking' ? '🏦' : acc.type === 'wallet' ? '📱' : '💰'
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-white truncate">{acc.name}</p>
-                        {acc.is_default && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Favorita</span>}
+              {accounts.map(acc => {
+                // Cálculo de Saldo Dinâmico
+                let currentBalance = Number(acc.initial_balance) || 0;
+                transactions.forEach(t => {
+                  if (t.account_id === acc.id && t.status === 'completed' && t.payment_method !== 'credit') {
+                    if (t.type === 'income') currentBalance += Number(t.amount);
+                    if (t.type === 'expense') currentBalance -= Number(t.amount);
+                  }
+                });
+
+                return (
+                  <div key={acc.id} className="bg-zinc-900 border border-zinc-800 rounded-[1.5rem] p-4 flex items-center justify-between group">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center border border-zinc-800 shrink-0 text-xl shadow-inner overflow-hidden">
+                        {acc.logo_url ? (
+                          <img src={acc.logo_url} alt={acc.name} className="w-full h-full object-cover" />
+                        ) : (
+                          acc.type === 'checking' ? '🏦' : acc.type === 'wallet' ? '📱' : '💰'
+                        )}
                       </div>
-                      <p className="text-xs text-zinc-500 mt-0.5">Saldo Inicial: R$ {Number(acc.initial_balance).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white truncate">{acc.name}</p>
+                          {acc.is_default && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Favorita</span>}
+                        </div>
+                        {/* AQUI MOSTRAMOS O SALDO ATUALIZADO */}
+                        <p className={`text-sm font-black mt-0.5 ${currentBalance >= 0 ? 'text-zinc-300' : 'text-red-400'}`}>R$ {currentBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEditAccount(acc)} disabled={busy} className="p-2 text-zinc-500 hover:text-emerald-400 transition" title="Editar Conta">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteAccount(acc.id)} disabled={busy} className="p-2 text-zinc-600 hover:text-red-400 transition" title="Excluir Conta">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditAccount(acc)} disabled={busy} className="p-2 text-zinc-500 hover:text-emerald-400 transition" title="Editar Conta">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDeleteAccount(acc.id)} disabled={busy} className="p-2 text-zinc-600 hover:text-red-400 transition" title="Excluir Conta">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </section>
 
-        {/* SECÇÃO DE CARTÕES */}
+        {/* SECÇÃO DE CARTÕES COM LIMITE DINÂMICO */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -391,6 +405,19 @@ export default function ContasPage() {
           <div className="grid gap-3">
             {creditCards.map(card => {
               const accLinked = accounts.find(a => a.id === card.account_id);
+              
+              // Cálculo de Limite Utilizado (Faturas Pendentes)
+              let usedLimit = 0;
+              transactions.forEach(t => {
+                if (t.credit_card_id === card.id && t.status === 'pending' && t.type === 'expense') {
+                  usedLimit += Number(t.amount);
+                }
+              });
+              
+              const totalLimit = Number(card.limit_amount) || 0;
+              const availableLimit = totalLimit - usedLimit;
+              const usedPercentage = totalLimit > 0 ? (usedLimit / totalLimit) * 100 : 0;
+
               return (
                 <div key={card.id} className="bg-gradient-to-tr from-zinc-900 to-zinc-800 border border-zinc-700 rounded-[1.5rem] p-5 shadow-lg relative overflow-hidden group">
                   <div className="absolute -right-4 -bottom-4 opacity-5 pointer-events-none">
@@ -428,13 +455,22 @@ export default function ContasPage() {
                   </div>
 
                   <div className="flex items-center gap-4 relative z-10">
-                    <div className="bg-zinc-950/50 px-3 py-2 rounded-xl flex-1">
-                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Limite</p>
-                      <p className="font-mono text-sm text-zinc-300 mt-0.5">R$ {Number(card.limit_amount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    <div className="bg-zinc-950/50 px-3 py-2 rounded-xl flex-1 border border-zinc-800">
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Disponível</p>
+                        <p className="text-[9px] text-purple-400 font-bold uppercase tracking-widest">{usedPercentage.toFixed(0)}% Usado</p>
+                      </div>
+                      <p className={`font-mono text-sm font-black ${availableLimit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>R$ {availableLimit.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                      
+                      <div className="w-full bg-zinc-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className={`h-full transition-all duration-1000 ${usedPercentage > 85 ? 'bg-red-500' : 'bg-purple-500'}`} style={{ width: `${Math.min(usedPercentage, 100)}%` }}></div>
+                      </div>
                     </div>
-                    <div className="bg-zinc-950/50 px-3 py-2 rounded-xl flex-1">
+                    <div className="bg-zinc-950/50 px-3 py-2 rounded-xl border border-zinc-800 text-center">
                       <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Fecho / Venc.</p>
-                      <p className="font-mono text-sm text-zinc-300 mt-0.5">Dia {card.closing_day} / Dia {card.due_day}</p>
+                      <p className="font-mono text-sm text-zinc-300 mt-0.5 flex items-center justify-center gap-1.5">
+                        <span className="text-yellow-500">{card.closing_day}</span> / <span className="text-red-400">{card.due_day}</span>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -564,16 +600,16 @@ export default function ContasPage() {
               
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-3">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1">Limite (R$)</label>
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1">Limite Global (R$)</label>
                   <input required type="text" inputMode="decimal" value={cardLimit} onChange={e=>setCardLimit(e.target.value)} placeholder="0,00" className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" />
                 </div>
                 <div className="col-span-3 grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1 text-red-400">Dia Fecho</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1 text-yellow-500">Dia Fecho</label>
                     <input required type="number" min="1" max="31" value={cardClosingDay} onChange={e=>setCardClosingDay(e.target.value)} placeholder="Ex: 5" className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" />
                   </div>
                   <div>
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1 text-emerald-400">Dia Vencimento</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1 text-red-400">Dia Vencimento</label>
                     <input required type="number" min="1" max="31" value={cardDueDay} onChange={e=>setCardDueDay(e.target.value)} placeholder="Ex: 12" className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" />
                   </div>
                 </div>
