@@ -1,16 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote } from "lucide-react";
+// O Receipt foi adicionado ao final desta lista!
+import { ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote, Receipt } from "lucide-react";
 
-/* =========================================================================
-   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE E VERCEL, USE AS IMPORTAÇÕES REAIS:
-   Descomente as duas linhas abaixo e apague o bloco MOCK a seguir.
-========================================================================= */
+// IMPORTAÇÕES OFICIAIS PARA PRODUÇÃO
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-
-
 
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -317,5 +313,3 @@ export default function FaturasPage() {
     </div>
   );
 }
-
-
