@@ -23,8 +23,6 @@ function init(request, env) {
   populateProcessEnv(url, env);
 }
 function initRuntime() {
-  Object.assign(process, { version: process.version || "v22.14.0" });
-  Object.assign(process.versions, { node: "22.14.0", ...process.versions });
   globalThis.__dirname ??= "";
   globalThis.__filename ??= "";
   import.meta.url ??= "file:///worker.js";
@@ -49,7 +47,7 @@ function initRuntime() {
   };
   Object.assign(globalThis, {
     Request: CustomRequest,
-    __BUILD_TIMESTAMP_MS__: 1776724443084,
+    __BUILD_TIMESTAMP_MS__: 1776857427403,
     __NEXT_BASE_PATH__: "",
     __ASSETS_RUN_WORKER_FIRST__: false,
     __TRAILING_SLASH__: false,

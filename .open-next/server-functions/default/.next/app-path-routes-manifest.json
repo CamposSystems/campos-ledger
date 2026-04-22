@@ -1,7 +1,13 @@
 {
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/admin/page": "/admin",
+  "/analytics/page": "/analytics",
+  "/categorias/page": "/categorias",
+  "/contas/page": "/contas",
+  "/faturas/page": "/faturas",
   "/favicon.ico/route": "/favicon.ico",
+  "/ia/page": "/ia",
   "/login/page": "/login",
   "/page": "/"
 }

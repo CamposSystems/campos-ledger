@@ -1,7 +1,13 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/analytics/page": "app/analytics/page.js",
+  "/categorias/page": "app/categorias/page.js",
+  "/contas/page": "app/contas/page.js",
+  "/faturas/page": "app/faturas/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/ia/page": "app/ia/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js"
 }

@@ -42,10 +42,46 @@
       "namedRegex": "^/_not\\-found(?:/)?$"
     },
     {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/analytics",
+      "regex": "^/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/analytics(?:/)?$"
+    },
+    {
+      "page": "/categorias",
+      "regex": "^/categorias(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/categorias(?:/)?$"
+    },
+    {
+      "page": "/contas",
+      "regex": "^/contas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/contas(?:/)?$"
+    },
+    {
+      "page": "/faturas",
+      "regex": "^/faturas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/faturas(?:/)?$"
+    },
+    {
       "page": "/favicon.ico",
       "regex": "^/favicon\\.ico(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/ia",
+      "regex": "^/ia(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/ia(?:/)?$"
     },
     {
       "page": "/login",

@@ -1,27 +1,14 @@
-import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata } from "next";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
-// Configurações da tela do celular (impede zoom de "pinça" que quebra o layout)
-export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-};
-
-// Avisa o iPhone que isso é um aplicativo instalável
 export const metadata: Metadata = {
   title: "Camp.OS Ledger",
-  description: "Gestão Financeira Premium",
+  description: "Sistema de controlo financeiro familiar de elite",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Ledger",
+    title: "Camp.OS",
   },
 };
 
@@ -32,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.className} bg-neutral-950 text-white antialiased selection:bg-orange-500/30`}>
+      <body className="antialiased bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
         {children}
       </body>
     </html>
