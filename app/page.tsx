@@ -7,14 +7,15 @@ import {
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt, AlertCircle
+  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users
 } from "lucide-react";
 
 /* =========================================================================
    ⚠️ ATENÇÃO CHARLES: PARA O SEU VS CODE E VERCEL, DESCOMENTE AS LINHAS ABAIXO:
 ========================================================================= */
- import { createClient } from "@supabase/supabase-js";
- import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
+
 
 
 // INICIALIZAÇÃO DO SUPABASE
@@ -36,19 +37,19 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   
   const [currentDate, setCurrentDate] = useState(new Date());
   
-  // Estados UI Adicionais
   const [isBalanceHidden, setIsBalanceHidden] = useState(true);
   
-  // Modal Ajuste de Saldo
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustAccountId, setAdjustAccountId] = useState("");
   const [newBalance, setNewBalance] = useState("");
 
-  // Estados do Modal de Transação
+  // Estados do Modal de Transação (Em 2 Passos)
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [modalType, setModalType] = useState<"expense" | "income" | "transfer">("expense");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -58,10 +59,13 @@ export default function Dashboard() {
   const [installments, setInstallments] = useState("1");
   const [isPaid, setIsPaid] = useState(true);
   
-  // Estados para o Desconto em Folha e Observações Extras
+  // Desconto em Folha
   const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
+  const [deductionOwner, setDeductionOwner] = useState("");
   const [deductionItem, setDeductionItem] = useState("");
   const [deductionBeneficiary, setDeductionBeneficiary] = useState("");
+  
+  const [isRecurring, setIsRecurring] = useState(false);
   
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedCardId, setSelectedCardId] = useState("");
@@ -108,10 +112,11 @@ export default function Dashboard() {
 
   async function fetchAuxiliaryData(familyId: string) {
     try {
-      const [accRes, cardsRes, catsRes] = await Promise.all([
+      const [accRes, cardsRes, catsRes, membersRes] = await Promise.all([
         supabase.from("accounts").select("*").eq("family_id", familyId).order("name"),
         supabase.from("credit_cards").select("*").eq("family_id", familyId).order("name"),
-        supabase.from("categories").select("*").eq("family_id", familyId).order("name")
+        supabase.from("categories").select("*").eq("family_id", familyId).order("name"),
+        supabase.from("profiles").select("id, display_name").eq("family_id", familyId)
       ]);
       
       if (accRes.data) {
@@ -127,6 +132,8 @@ export default function Dashboard() {
       }
 
       if (catsRes.data) setCategories(catsRes.data);
+      if (membersRes.data) setFamilyMembers(membersRes.data);
+      
     } catch (e) {
       console.error("Erro ao carregar dados auxiliares:", e);
     }
@@ -174,11 +181,9 @@ export default function Dashboard() {
     return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  async function handleSaveTransaction(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSaveTransaction() {
     if (!userProfile?.family_id) return alert("Você precisa estar vinculado a uma família.");
     
-    if (modalType !== "transfer" && !categoryId) return alert("Selecione uma categoria para o lançamento.");
     if (modalType === "transfer" && (!selectedAccountId || !destinationAccountId)) return alert("Selecione as contas de origem e destino.");
     if (modalType === "transfer" && selectedAccountId === destinationAccountId) return alert("A conta de destino deve ser diferente da origem.");
     
@@ -187,20 +192,23 @@ export default function Dashboard() {
     if (!isCredit && !selectedAccountId) return alert("Nenhuma conta selecionada.");
 
     const numAmount = parseCurrency(amount);
-    if (numAmount <= 0) return alert("Insira um valor válido.");
-
+    
     setBusy(true);
 
     const selectedCat = categories.find(c => c.id === categoryId);
     const totalInstallments = parseInt(installments) || 1;
-    const installmentAmount = totalInstallments > 1 ? Number((numAmount / totalInstallments).toFixed(2)) : numAmount;
+    
+    // LÓGICA DE RECORRÊNCIA: Se for recorrente, não divide o valor. Se for parcelado, divide.
+    const installmentAmount = (totalInstallments > 1 && !isRecurring) ? Number((numAmount / totalInstallments).toFixed(2)) : numAmount;
     
     const parentId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'id-' + new Date().getTime();
 
-    // Formatação da observação extra (Notas do Desconto em Folha)
     let finalNotes = null;
-    if (modalType === 'expense' && isPayrollDeduction && deductionItem) {
-      finalNotes = `Item: ${deductionItem.trim()}${deductionBeneficiary ? ` | Para: ${deductionBeneficiary.trim()}` : ''}`;
+    if (modalType === 'expense' && isPayrollDeduction) {
+      const ownerName = familyMembers.find(m => m.id === deductionOwner)?.display_name || 'Desconhecido';
+      finalNotes = `De: ${ownerName}`;
+      if (deductionItem) finalNotes += ` | Item: ${deductionItem.trim()}`;
+      if (deductionBeneficiary) finalNotes += ` | Para: ${deductionBeneficiary.trim()}`;
     }
 
     const rowsToInsert = [];
@@ -226,7 +234,7 @@ export default function Dashboard() {
       
       let rowDesc = description.trim() || (modalType === 'transfer' ? 'Transferência' : (selectedCat?.name || "Lançamento"));
       if (totalInstallments > 1) {
-        rowDesc = `${rowDesc} (${i + 1}/${totalInstallments})`;
+        rowDesc = isRecurring ? `${rowDesc} (Mês ${i + 1}/${totalInstallments})` : `${rowDesc} (${i + 1}/${totalInstallments})`;
       }
 
       const baseTx = {
@@ -347,6 +355,7 @@ export default function Dashboard() {
   }
 
   function resetModal() {
+    setModalStep(1);
     setAmount("");
     setDescription("");
     setCategoryId("");
@@ -355,17 +364,16 @@ export default function Dashboard() {
     setTransactionDate(new Date().toISOString().split("T")[0]);
     setIsPaid(true);
     setIsPayrollDeduction(false);
+    setDeductionOwner("");
     setDeductionItem("");
     setDeductionBeneficiary("");
+    setIsRecurring(false);
   }
 
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
 
-  // =========================================================================
-  // CÁLCULOS PRINCIPAIS (COM LÓGICA DE PREVISÃO, DESCONTO E ALERTAS)
-  // =========================================================================
   const calculations = useMemo(() => {
     let realBalance = accounts.reduce((acc, curr) => acc + (Number(curr.initial_balance) || 0), 0);
     
@@ -381,7 +389,7 @@ export default function Dashboard() {
     let monthlyExpense = 0; 
     let pendingExpense = 0;
     let totalDeductions = 0;
-    const upcomingBills: any[] = []; // Contas a vencer nos próximos 5 dias
+    const upcomingBills: any[] = []; 
     const today = new Date();
     today.setHours(0,0,0,0);
     
@@ -394,7 +402,6 @@ export default function Dashboard() {
         
         if (t.status === 'pending') {
           pendingExpense += val;
-          // Verificar alertas a 5 dias
           const txDate = new Date(t.date + "T12:00:00");
           txDate.setHours(0,0,0,0);
           const diffTime = txDate.getTime() - today.getTime();
@@ -409,7 +416,7 @@ export default function Dashboard() {
       }
     });
 
-    const expectedIncome = 1500; // Valor Salarial Previsto
+    const expectedIncome = 1500; 
     const actualIncome = monthlyIncome;
     const difference = actualIncome - expectedIncome;
     const isWarning = actualIncome < expectedIncome && actualIncome > 0;
@@ -503,7 +510,6 @@ export default function Dashboard() {
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-8">
         
-        {/* Máquina do Tempo */}
         <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800/80 p-2 rounded-2xl">
           <button onClick={prevMonth} className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition">
             <ArrowLeft className="w-4 h-4" />
@@ -519,7 +525,6 @@ export default function Dashboard() {
 
         <section className="space-y-3">
           
-          {/* NOVO: ALERTA DE VENCIMENTO VISUAL A 5 DIAS */}
           {calculations.upcomingBills.length > 0 && (
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 mb-4 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center gap-2 mb-3">
@@ -597,7 +602,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* ALERTA DE RENDIMENTO E DESCONTOS EM FOLHA */}
           {calculations.isWarning && (
             <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 mt-3 animate-in fade-in zoom-in">
               <AlertTriangle className="text-red-500 w-6 h-6 shrink-0" />
@@ -634,7 +638,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* TIMELINE */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em]">Movimentações do Mês</h3>
@@ -657,7 +660,7 @@ export default function Dashboard() {
                    const y = parseInt(dateParts[0]);
                    const m = parseInt(dateParts[1]) - 1;
                    const d = parseInt(dateParts[2]);
-                   const dateObj = new Date(y, m, d, 12, 0, 0); // Meio-dia evita fusos
+                   const dateObj = new Date(y, m, d, 12, 0, 0); 
                    dateLabel = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
                    
                    const today = new Date();
@@ -753,7 +756,6 @@ export default function Dashboard() {
 
       </main>
 
-      {/* FLOAT BAR DE AÇÕES */}
       <div className="fixed bottom-6 left-0 right-0 px-4 z-40 max-w-md mx-auto pointer-events-none flex gap-3">
         <button onClick={() => router.push("/ia")} className="w-14 h-14 bg-indigo-600 text-white rounded-[1.5rem] hover:bg-indigo-500 active:scale-95 transition-all shadow-lg flex items-center justify-center shrink-0 pointer-events-auto group relative overflow-hidden">
           <div className="absolute inset-0 bg-white/20 translate-y-10 group-hover:translate-y-0 transition-transform"></div>
@@ -807,124 +809,197 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MODAL DE TRANSAÇÃO NORMAL */}
+      {/* MODAL DE TRANSAÇÃO (DIVIDIDO EM 2 PASSOS) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/95 z-50 flex flex-col animate-in fade-in duration-200 sm:p-4 pointer-events-auto">
           <div className="flex-1 bg-zinc-950 sm:max-w-lg sm:mx-auto sm:rounded-[3rem] w-full flex flex-col overflow-hidden relative">
             <div className="px-6 pt-6 pb-4 flex justify-between items-center border-b border-zinc-900">
-              <h2 className="text-2xl font-black italic">NOVO REGISTRO</h2>
+              <div className="flex items-center gap-3">
+                {modalStep === 2 && (
+                  <button type="button" onClick={() => setModalStep(1)} className="w-8 h-8 bg-zinc-900 hover:bg-zinc-800 rounded-full flex items-center justify-center transition">
+                    <ArrowLeft className="w-4 h-4 text-zinc-400 hover:text-white" />
+                  </button>
+                )}
+                <h2 className="text-2xl font-black italic">NOVO REGISTRO</h2>
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar">
-              <form id="tx-form" onSubmit={handleSaveTransaction} className="space-y-8">
-                <div className="flex bg-zinc-900 p-1.5 rounded-2xl">
-                  <button type="button" onClick={() => {setModalType("expense"); setCategoryId(""); setPaymentMethod("credit"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "expense" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500"}`}>Despesa</button>
-                  <button type="button" onClick={() => {setModalType("income"); setCategoryId(""); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "income" ? "bg-emerald-600 text-white shadow-md" : "text-zinc-500"}`}>Receita</button>
-                  <button type="button" onClick={() => {setModalType("transfer"); setCategoryId("transfer"); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "transfer" ? "bg-blue-600 text-white shadow-md" : "text-zinc-500"}`}>Transf.</button>
-                </div>
+              <form id="tx-form" onSubmit={(e) => {
+                e.preventDefault();
+                if (modalStep === 1) {
+                  if (modalType !== "transfer" && !categoryId) return alert("Selecione uma categoria para o lançamento.");
+                  if (parseCurrency(amount) <= 0) return alert("Insira um valor válido.");
+                  if (modalType === 'expense' && isPayrollDeduction && !deductionOwner) return alert("Selecione de quem será o desconto em folha.");
+                  setModalStep(2);
+                } else {
+                  handleSaveTransaction();
+                }
+              }} className="space-y-8">
                 
-                <div className="flex flex-col items-center">
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Valor</p>
-                  <div className="flex items-end justify-center"><span className="text-3xl text-zinc-600 font-black mb-1 mr-2">R$</span><input required autoFocus type="text" inputMode="decimal" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} className={`bg-transparent text-center text-6xl font-black focus:outline-none placeholder-zinc-800 w-full max-w-[250px] ${modalType === 'income' ? 'text-emerald-400' : 'text-white'}`} /></div>
-                </div>
-
-                {/* OPÇÃO DE DESCONTO EM FOLHA COM INPUTS EXPANSÍVEIS */}
-                {modalType === "expense" && (
-                  <div className="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest">Desconto em Folha</p>
-                        <p className="text-[9px] text-zinc-500 font-medium">Debitado direto do seu salário.</p>
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={isPayrollDeduction} 
-                        onChange={(e) => setIsPayrollDeduction(e.target.checked)} 
-                        className="w-5 h-5 accent-amber-500 bg-zinc-900 border-zinc-700 rounded" 
-                      />
+                {/* =======================
+                    PASSO 1: VALOR E CATEGORIA 
+                    ======================= */}
+                {modalStep === 1 && (
+                  <div className="animate-in slide-in-from-left-4 fade-in">
+                    <div className="flex bg-zinc-900 p-1.5 rounded-2xl mb-8">
+                      <button type="button" onClick={() => {setModalType("expense"); setCategoryId(""); setPaymentMethod("credit"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "expense" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500"}`}>Despesa</button>
+                      <button type="button" onClick={() => {setModalType("income"); setCategoryId(""); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "income" ? "bg-emerald-600 text-white shadow-md" : "text-zinc-500"}`}>Receita</button>
+                      <button type="button" onClick={() => {setModalType("transfer"); setCategoryId("transfer"); setPaymentMethod("pix"); setIsPayrollDeduction(false);}} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${modalType === "transfer" ? "bg-blue-600 text-white shadow-md" : "text-zinc-500"}`}>Transf.</button>
                     </div>
                     
-                    {/* Campos extras que aparecem apenas quando ativado */}
-                    {isPayrollDeduction && (
-                      <div className="pt-4 border-t border-amber-500/10 grid grid-cols-1 gap-3 animate-in fade-in slide-in-from-top-2">
-                        <div>
-                          <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">O que foi comprado?</label>
+                    <div className="flex flex-col items-center mb-8">
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Valor</p>
+                      <div className="flex items-end justify-center"><span className="text-3xl text-zinc-600 font-black mb-1 mr-2">R$</span><input required autoFocus type="text" inputMode="decimal" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} className={`bg-transparent text-center text-6xl font-black focus:outline-none placeholder-zinc-800 w-full max-w-[250px] ${modalType === 'income' ? 'text-emerald-400' : 'text-white'}`} /></div>
+                    </div>
+
+                    {modalType === "expense" && (
+                      <div className="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-4 mb-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500"><Users className="w-4 h-4"/></div>
+                            <div>
+                              <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest">Desconto em Folha</p>
+                              <p className="text-[9px] text-zinc-500 font-medium">Debitado do salário de alguém.</p>
+                            </div>
+                          </div>
                           <input 
-                            type="text" 
-                            placeholder="Ex: Tênis, Ovo de Páscoa..." 
-                            value={deductionItem} 
-                            onChange={(e) => setDeductionItem(e.target.value)} 
-                            className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50 transition-colors" 
-                            required={isPayrollDeduction}
+                            type="checkbox" 
+                            checked={isPayrollDeduction} 
+                            onChange={(e) => setIsPayrollDeduction(e.target.checked)} 
+                            className="w-5 h-5 accent-amber-500 bg-zinc-900 border-zinc-700 rounded" 
                           />
                         </div>
-                        <div>
-                          <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">Comprado para quem? (Opcional)</label>
-                          <input 
-                            type="text" 
-                            placeholder="Ex: João, Mãe, Colega..." 
-                            value={deductionBeneficiary} 
-                            onChange={(e) => setDeductionBeneficiary(e.target.value)} 
-                            className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50 transition-colors" 
-                          />
-                        </div>
+                        
+                        {isPayrollDeduction && (
+                          <div className="pt-4 border-t border-amber-500/10 grid grid-cols-1 gap-3 animate-in fade-in slide-in-from-top-2">
+                            <div>
+                              <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">De quem descontar?</label>
+                              <select 
+                                required={isPayrollDeduction}
+                                value={deductionOwner}
+                                onChange={(e) => setDeductionOwner(e.target.value)}
+                                className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-amber-500/50 appearance-none"
+                              >
+                                <option value="">Selecione o membro...</option>
+                                {familyMembers.map(m => (
+                                  <option key={m.id} value={m.id}>{m.display_name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">O que foi comprado?</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="Ex: Tênis..." 
+                                  value={deductionItem} 
+                                  onChange={(e) => setDeductionItem(e.target.value)} 
+                                  className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-amber-500/50" 
+                                  required={isPayrollDeduction}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] text-amber-500/70 font-bold uppercase tracking-widest ml-1">Para quem? (Op)</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="Ex: João" 
+                                  value={deductionBeneficiary} 
+                                  onChange={(e) => setDeductionBeneficiary(e.target.value)} 
+                                  className="w-full mt-1 bg-zinc-950/50 border border-amber-500/20 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-amber-500/50" 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {modalType !== "transfer" && (
+                      <div className="space-y-6 max-h-[35vh] overflow-y-auto no-scrollbar pb-4 pr-1">
+                        {favoriteCats.length > 0 && (
+                          <div><p className="text-[10px] text-yellow-500 font-bold uppercase mb-3 flex items-center gap-1.5"><Star className="w-3 h-3 fill-yellow-500" /> Destaques</p><div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{favoriteCats.map((cat) => (<button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)} className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all ${categoryId === cat.id ? `bg-zinc-800 border-yellow-500 shadow-md` : `bg-zinc-950 border-zinc-900/80`}`}><div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">{cat.logo_url ? <img src={cat.logo_url} className="w-full h-full object-cover" /> : <span className="text-2xl">{cat.icon}</span>}</div><span className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full ${categoryId === cat.id ? 'text-white' : 'text-zinc-500'}`}>{cat.name}</span></button>))}</div></div>
+                        )}
+                        {parentCats.map((parent) => {
+                          const children = currentCats.filter(c => c.parent_id === parent.id);
+                          if (children.length === 0) return null;
+                          return (<div key={parent.id}><p className="text-[10px] text-zinc-500 font-bold uppercase mb-3 flex items-center gap-1.5"><span>{parent.icon}</span> {parent.name}</p><div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{children.map((cat) => (<button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)} className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all ${categoryId === cat.id ? `bg-zinc-800 border-zinc-500 shadow-md` : `bg-zinc-950 border-zinc-900/80`}`}><div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">{cat.logo_url ? <img src={cat.logo_url} className="w-full h-full object-cover" /> : <span className="text-2xl">{cat.icon}</span>}</div><span className={`text-[8px] font-bold uppercase text-center leading-tight line-clamp-2 w-full ${categoryId === cat.id ? 'text-white' : 'text-zinc-500'}`}>{cat.name}</span></button>))}</div></div>);
+                        })}
                       </div>
                     )}
                   </div>
                 )}
 
-                {modalType !== "transfer" && (
-                  <div className="space-y-6 max-h-[35vh] overflow-y-auto no-scrollbar pb-4 pr-1">
-                    {favoriteCats.length > 0 && (
-                      <div><p className="text-[10px] text-yellow-500 font-bold uppercase mb-3 flex items-center gap-1.5"><Star className="w-3 h-3 fill-yellow-500" /> Destaques</p><div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{favoriteCats.map((cat) => (<button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)} className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all ${categoryId === cat.id ? `bg-zinc-800 border-yellow-500 shadow-md` : `bg-zinc-950 border-zinc-900/80`}`}><div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">{cat.logo_url ? <img src={cat.logo_url} className="w-full h-full object-cover" /> : <span className="text-2xl">{cat.icon}</span>}</div><span className={`text-[8px] font-bold uppercase tracking-tight text-center leading-tight line-clamp-2 w-full ${categoryId === cat.id ? 'text-white' : 'text-zinc-500'}`}>{cat.name}</span></button>))}</div></div>
-                    )}
-                    {parentCats.map((parent) => {
-                      const children = currentCats.filter(c => c.parent_id === parent.id);
-                      if (children.length === 0) return null;
-                      return (<div key={parent.id}><p className="text-[10px] text-zinc-500 font-bold uppercase mb-3 flex items-center gap-1.5"><span>{parent.icon}</span> {parent.name}</p><div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{children.map((cat) => (<button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)} className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl border transition-all ${categoryId === cat.id ? `bg-zinc-800 border-zinc-500 shadow-md` : `bg-zinc-950 border-zinc-900/80`}`}><div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">{cat.logo_url ? <img src={cat.logo_url} className="w-full h-full object-cover" /> : <span className="text-2xl">{cat.icon}</span>}</div><span className={`text-[8px] font-bold uppercase text-center leading-tight line-clamp-2 w-full ${categoryId === cat.id ? 'text-white' : 'text-zinc-500'}`}>{cat.name}</span></button>))}</div></div>);
-                    })}
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Descrição (Opcional)</p><input type="text" placeholder="Ex: Almoço com a equipa" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
-                  
-                  {/* Seção de Parcelas e Data */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
-                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Parcelas</p><select disabled={modalType !== 'expense'} value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option></select></div>
-                  </div>
-
-                  {/* Seção de Meio de Pagamento */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2 md:col-span-1">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Pagar/Receber com</p>
-                      <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none">
-                        <option value="pix">PIX</option>
-                        <option value="debit">Débito</option>
-                        {modalType !== 'transfer' && <option value="credit">Cartão de Crédito</option>}
-                        <option value="cash">Dinheiro / Espécie</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2 md:col-span-1">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{paymentMethod === 'credit' ? 'Selecione o Cartão' : 'Selecione a Conta'}</p>
-                      {paymentMethod === 'credit' ? (
-                         <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none">
-                           <option value="">Escolha um cartão...</option>
-                           {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                         </select>
-                      ) : (
-                         <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none">
-                           <option value="">Escolha uma conta...</option>
-                           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                         </select>
+                {/* =======================
+                    PASSO 2: PAGAMENTO E DATAS 
+                    ======================= */}
+                {modalStep === 2 && (
+                  <div className="animate-in slide-in-from-right-4 fade-in space-y-6">
+                    
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Resumo do Lançamento</p>
+                        <p className="text-xl font-black text-white mt-1">R$ {amount || "0,00"}</p>
+                      </div>
+                      {modalType !== "transfer" && categoryId && (
+                        <div className="text-right">
+                           <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Categoria</p>
+                           <div className="bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 text-xs font-bold text-white">
+                             {categories.find(c => c.id === categoryId)?.name || "Selecionada"}
+                           </div>
+                        </div>
                       )}
                     </div>
+
+                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Descrição (Opcional)</p><input type="text" placeholder="Ex: Almoço com a equipa" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
+                    
+                    <div className="grid grid-cols-3 gap-3 bg-zinc-900/30 p-4 border border-zinc-800/50 rounded-2xl">
+                      <div className="col-span-3 flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase flex items-center gap-1.5"><Repeat className="w-3 h-3"/> Repetição</p>
+                        <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
+                          <button type="button" onClick={() => setIsRecurring(false)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${!isRecurring ? 'bg-zinc-800 text-white' : 'text-zinc-500'}`}>Dividir (Cartão)</button>
+                          <button type="button" onClick={() => setIsRecurring(true)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${isRecurring ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500'}`}>Fixo (Mensal)</button>
+                        </div>
+                      </div>
+                      <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data Inicial</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
+                      <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{isRecurring ? "Meses" : "Parcelas"}</p><select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none focus:border-indigo-500/50"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option><option value="24">24x</option></select></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="col-span-2 md:col-span-1">
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Pagar/Receber com</p>
+                        <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50 appearance-none">
+                          <option value="pix">PIX</option>
+                          <option value="debit">Débito</option>
+                          {modalType !== 'transfer' && <option value="credit">Cartão de Crédito</option>}
+                          <option value="cash">Dinheiro / Espécie</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2 md:col-span-1">
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{paymentMethod === 'credit' ? 'Selecione o Cartão' : 'Selecione a Conta'}</p>
+                        {paymentMethod === 'credit' ? (
+                           <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none appearance-none focus:border-purple-400">
+                             <option value="">Escolha um cartão...</option>
+                             {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                           </select>
+                        ) : (
+                           <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none focus:border-indigo-500/50">
+                             <option value="">Escolha uma conta...</option>
+                             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                           </select>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </form>
             </div>
-            <div className="p-4 bg-zinc-950 border-t border-zinc-900 pb-8 sm:pb-4"><button form="tx-form" disabled={busy} className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-zinc-200 shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{busy ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Confirmar Operação"}</button></div>
+            
+            <div className="p-4 bg-zinc-950 border-t border-zinc-900 pb-8 sm:pb-4">
+              <button form="tx-form" disabled={busy} className={`w-full font-black py-4 rounded-2xl shadow-lg disabled:opacity-50 flex justify-center items-center gap-2 transition ${modalStep === 1 ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-white text-black hover:bg-zinc-200'}`}>
+                {busy ? <RefreshCw className="w-5 h-5 animate-spin" /> : (modalStep === 1 ? "Avançar para Pagamento" : "Confirmar Operação")}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -11,7 +11,7 @@ import {
    ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
 ========================================================================= */
 import { createClient } from "@supabase/supabase-js";
-import { useRouter } from "next/navigation";
+ import { useRouter } from "next/navigation";
 
 
 
@@ -28,7 +28,7 @@ export default function ContasPage() {
   
   const [accounts, setAccounts] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]); // Adicionado para saldos dinâmicos
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   // Estados dos Modais
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -365,7 +365,6 @@ export default function ContasPage() {
                           <p className="font-bold text-white truncate">{acc.name}</p>
                           {acc.is_default && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Favorita</span>}
                         </div>
-                        {/* AQUI MOSTRAMOS O SALDO ATUALIZADO */}
                         <p className={`text-sm font-black mt-0.5 ${currentBalance >= 0 ? 'text-zinc-300' : 'text-red-400'}`}>R$ {currentBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                       </div>
                     </div>

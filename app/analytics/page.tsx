@@ -7,26 +7,29 @@ import {
   CreditCard, Banknote, CalendarDays, Zap, ShieldAlert, Wallet
 } from "lucide-react";
 
-let supabase: any;
-let useRouterSafe: any;
+/* =========================================================================
+   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
+========================================================================= */
+// import { createClient } from "@supabase/supabase-js";
+// import { useRouter } from "next/navigation";
 
-const mockRouter = { push: (url: string) => console.log(`Routing to: ${url}`) };
+/* =========================================================================
+   ⚠️ E APAGUE ESTE BLOCO MOCK INTEIRO ANTES DE ENVIAR PARA O GITHUB:
+========================================================================= */
+const createClient = (url: any, key: any) => ({
+  auth: { getSession: async () => ({ data: { session: null }, error: null }), signOut: async () => {} },
+  from: () => ({ select: () => ({ eq: () => ({ order: async () => ({ data: [] }), gte: () => ({ lte: () => ({ data: [] }) }) }) }) })
+});
+const useRouter = () => ({ push: (path: string) => console.log("Navegar:", path) });
+/* ========================================================================= */
 
-try {
-  const sb = require("@supabase/supabase-js");
-  const nextNav = require("next/navigation");
-  supabase = sb.createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || "", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
-  useRouterSafe = nextNav.useRouter;
-} catch (e) {
-  useRouterSafe = () => mockRouter;
-  supabase = {
-    auth: { getSession: async () => ({ data: { session: null }, error: null }) },
-    from: () => ({ select: () => ({ eq: () => ({ order: async () => ({ data: [] }), gte: () => ({ lte: () => ({ data: [] }) }) }) }) })
-  };
-}
+// INICIALIZAÇÃO DO SUPABASE
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function AnalyticsProPage() {
-  const router = typeof useRouterSafe === 'function' ? useRouterSafe() : mockRouter;
+  const router = useRouter();
   
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false); // Para disparar animações CSS
@@ -162,7 +165,6 @@ export default function AnalyticsProPage() {
     const topTransactions = [...expenses].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5);
 
     // 12. Projeção Faturas (Somando pendentes futuras de crédito)
-    // Simplificando: vamos contar as parcelas futuras na tabela allTransactions
     const futureFaturas = { mes1: 0, mes2: 0, mes3: 0 };
     const currentMonth = new Date().getMonth();
     allTransactions.forEach(t => {
@@ -184,7 +186,7 @@ export default function AnalyticsProPage() {
   }, [transactions, allTransactions, accounts, creditCards, categories]);
 
   // ==========================================
-  // IA CONSULTANT: GERAÇÃO DE INSIGHTS PROFUNDOS
+  // IA CONSULTOR: GERAÇÃO DE INSIGHTS PROFUNDOS
   // ==========================================
   const aiInsights = useMemo(() => {
     const i = [];
@@ -388,7 +390,6 @@ export default function AnalyticsProPage() {
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-5 flex flex-col items-center justify-center">
             <h3 className="text-[10px] uppercase font-black tracking-widest text-zinc-500 flex items-center gap-2 mb-5 w-full"><PieChart className="w-4 h-4"/> 4. Meios de Pagamento</h3>
             
-            {/* Gráfico Donut CSS */}
             <div className="w-32 h-32 rounded-full border-[8px] border-zinc-950 relative flex items-center justify-center transition-all duration-1000" 
                  style={{ 
                    background: mounted && metrics.totalExp > 0 ? `conic-gradient(
