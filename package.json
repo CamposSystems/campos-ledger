@@ -8,7 +8,7 @@
     "dev": "next dev",
     "deploy": "opennextjs-cloudflare build",
     "lint": "next lint"
-  }
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
     "lucide-react": "^1.8.0",
