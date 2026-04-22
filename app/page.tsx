@@ -7,16 +7,12 @@ import {
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users
+  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil
 } from "lucide-react";
 
-/* =========================================================================
-   ⚠️ ATENÇÃO CHARLES: PARA O SEU VS CODE E VERCEL, DESCOMENTE AS LINHAS ABAIXO:
-========================================================================= */
+// IMPORTAÇÕES OFICIAIS PARA PRODUÇÃO
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-
-
 
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -47,7 +43,7 @@ export default function Dashboard() {
   const [adjustAccountId, setAdjustAccountId] = useState("");
   const [newBalance, setNewBalance] = useState("");
 
-  // Estados do Modal de Transação (Em 2 Passos)
+  // Estados do Modal de Criação (Em 2 Passos)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [modalType, setModalType] = useState<"expense" | "income" | "transfer">("expense");
@@ -59,17 +55,22 @@ export default function Dashboard() {
   const [installments, setInstallments] = useState("1");
   const [isPaid, setIsPaid] = useState(true);
   
+  // Lógica de Parcelas
+  const [amountMode, setAmountMode] = useState<"total" | "installment">("total"); // NOVO: Define se o valor é o Total ou o da Parcela
+  const [isRecurring, setIsRecurring] = useState(false);
+
   // Desconto em Folha
   const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
   const [deductionOwner, setDeductionOwner] = useState("");
   const [deductionItem, setDeductionItem] = useState("");
   const [deductionBeneficiary, setDeductionBeneficiary] = useState("");
   
-  const [isRecurring, setIsRecurring] = useState(false);
-  
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedCardId, setSelectedCardId] = useState("");
   const [destinationAccountId, setDestinationAccountId] = useState("");
+
+  // Estado de Edição Rápida
+  const [editingTx, setEditingTx] = useState<any>(null); // NOVO: Controla a edição de transações
 
   useEffect(() => {
     initApp();
@@ -89,7 +90,7 @@ export default function Dashboard() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, display_name, family_id")
+        .select("id, display_name, family_id, email")
         .eq("id", session.user.id)
         .single();
 
@@ -171,7 +172,7 @@ export default function Dashboard() {
 
   function parseCurrency(value: string) {
     if (!value) return 0;
-    const cleanValue = value.replace(/\./g, "").replace(",", ".");
+    const cleanValue = value.toString().replace(/\./g, "").replace(",", ".");
     const parsed = parseFloat(cleanValue);
     return isNaN(parsed) ? 0 : parsed;
   }
@@ -198,8 +199,16 @@ export default function Dashboard() {
     const selectedCat = categories.find(c => c.id === categoryId);
     const totalInstallments = parseInt(installments) || 1;
     
-    // LÓGICA DE RECORRÊNCIA: Se for recorrente, não divide o valor. Se for parcelado, divide.
-    const installmentAmount = (totalInstallments > 1 && !isRecurring) ? Number((numAmount / totalInstallments).toFixed(2)) : numAmount;
+    // NOVO: LÓGICA DE DIVISÃO TOTAL VS PARCELA
+    let installmentAmount = numAmount;
+    if (totalInstallments > 1 && !isRecurring) {
+      if (amountMode === "total") {
+        installmentAmount = Number((numAmount / totalInstallments).toFixed(2));
+      } else {
+        // Se escolheu 'installment', o installmentAmount é exatamente o valor digitado.
+        installmentAmount = numAmount; 
+      }
+    }
     
     const parentId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'id-' + new Date().getTime();
 
@@ -288,6 +297,35 @@ export default function Dashboard() {
     }
   }
 
+  // NOVO: Função para atualizar Transação individualmente
+  async function handleUpdateTransaction(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTx) return;
+
+    setBusy(true);
+    const numAmount = parseCurrency(editingTx.amount);
+    
+    try {
+      const { error } = await supabase.from("transactions").update({
+        amount: numAmount,
+        description: editingTx.description,
+        date: editingTx.date
+      }).eq("id", editingTx.id);
+
+      if (error) throw error;
+
+      setEditingTx(null);
+      await Promise.all([
+        fetchMonthlyTransactions(userProfile.family_id, currentDate),
+        fetchAllTransactions(userProfile.family_id)
+      ]);
+    } catch (err: any) {
+      alert("Erro ao atualizar: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAdjustBalance(e: React.FormEvent) {
     e.preventDefault();
     if (!adjustAccountId) return alert("Selecione uma conta.");
@@ -368,6 +406,7 @@ export default function Dashboard() {
     setDeductionItem("");
     setDeductionBeneficiary("");
     setIsRecurring(false);
+    setAmountMode("total");
   }
 
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -489,9 +528,6 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-2">
-            <button onClick={() => alert("O envio agendado de e-mails será implementado através de rotinas CRON no Supabase numa próxima atualização estrutural.")} className="p-2.5 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition" title="Ativar Alertas por E-mail">
-              <Bell className="w-5 h-5" />
-            </button>
             <button onClick={() => router.push("/categorias")} className="p-2.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition" title="Gerir Categorias">
               <Calendar className="w-5 h-5" />
             </button>
@@ -697,7 +733,6 @@ export default function Dashboard() {
                               <p className={`font-black text-sm truncate ${isCompleted ? 'text-zinc-100' : 'text-zinc-400'}`}>
                                 {tx.description}
                               </p>
-                              {/* EXIBE A INFORMAÇÃO DO DESCONTO EM FOLHA LOGO ABAIXO DA DESCRIÇÃO */}
                               {tx.notes && (
                                 <p className="text-[10px] text-amber-500/80 truncate mt-0.5 font-medium">
                                   ↳ {tx.notes}
@@ -730,18 +765,28 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex flex-col items-end gap-2">
                               <p className={`font-black text-sm tracking-tight ${isIncome ? 'text-emerald-400' : (isCompleted ? 'text-white' : 'text-zinc-400')}`}>
                                 {isIncome ? '+' : '-'} R$ {maskValue(tx.amount)}
                               </p>
                               
-                              <button 
-                                onClick={() => toggleTransactionStatus(tx)}
-                                className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md transition-colors ${isCompleted ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20'}`}
-                              >
-                                {isCompleted ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                {isCompleted ? "Pago" : "Pendente"}
-                              </button>
+                              <div className="flex items-center gap-1">
+                                {/* NOVO: Botão de Editar */}
+                                <button 
+                                  onClick={() => setEditingTx({ ...tx, amount: String(tx.amount).replace(".", ",") })}
+                                  className="p-1 bg-zinc-800 text-zinc-400 hover:text-white rounded-md transition-colors"
+                                  title="Editar Lançamento"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button 
+                                  onClick={() => toggleTransactionStatus(tx)}
+                                  className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md transition-colors ${isCompleted ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20'}`}
+                                >
+                                  {isCompleted ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                  {isCompleted ? "Pago" : "Pend."}
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -765,6 +810,56 @@ export default function Dashboard() {
           <Plus className="w-5 h-5" /> Lançar
         </button>
       </div>
+
+      {/* MODAL DE EDIÇÃO DE TRANSAÇÃO (NOVO) */}
+      {editingTx && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 pointer-events-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-[2.5rem] p-6 w-full max-w-sm relative">
+             <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black">Editar Lançamento</h3>
+                <button onClick={() => setEditingTx(null)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+              </div>
+              <p className="text-xs text-zinc-500 mb-6">Altere os dados desta parcela específica.</p>
+              
+              <form onSubmit={handleUpdateTransaction} className="space-y-4">
+                 <div>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1">Valor (R$)</label>
+                    <input 
+                      required 
+                      type="text" 
+                      inputMode="decimal"
+                      value={editingTx.amount}
+                      onChange={e => setEditingTx({...editingTx, amount: e.target.value})}
+                      className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none"
+                    />
+                 </div>
+                 <div>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1">Descrição</label>
+                    <input 
+                      required 
+                      type="text" 
+                      value={editingTx.description}
+                      onChange={e => setEditingTx({...editingTx, description: e.target.value})}
+                      className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none"
+                    />
+                 </div>
+                 <div>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest ml-1">Data</label>
+                    <input 
+                      required 
+                      type="date" 
+                      value={editingTx.date}
+                      onChange={e => setEditingTx({...editingTx, date: e.target.value})}
+                      className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none"
+                    />
+                 </div>
+                 <button type="submit" disabled={busy} className="w-full bg-emerald-500/20 text-emerald-400 font-black py-4 rounded-xl hover:bg-emerald-500/30 transition uppercase tracking-widest text-xs mt-4">
+                  {busy ? "Salvando..." : "Atualizar Parcela"}
+                </button>
+              </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL AJUSTE DE SALDO */}
       {showAdjustModal && (
@@ -957,12 +1052,20 @@ export default function Dashboard() {
                       <div className="col-span-3 flex items-center justify-between mb-2">
                         <p className="text-[10px] text-zinc-500 font-bold uppercase flex items-center gap-1.5"><Repeat className="w-3 h-3"/> Repetição</p>
                         <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
-                          <button type="button" onClick={() => setIsRecurring(false)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${!isRecurring ? 'bg-zinc-800 text-white' : 'text-zinc-500'}`}>Dividir (Cartão)</button>
-                          <button type="button" onClick={() => setIsRecurring(true)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${isRecurring ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500'}`}>Fixo (Mensal)</button>
+                          <button type="button" onClick={() => setIsRecurring(false)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${!isRecurring ? 'bg-zinc-800 text-white' : 'text-zinc-500'}`}>Dividir</button>
+                          <button type="button" onClick={() => setIsRecurring(true)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${isRecurring ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500'}`}>Mensal Fixo</button>
                         </div>
                       </div>
                       <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data Inicial</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
                       <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{isRecurring ? "Meses" : "Parcelas"}</p><select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none focus:border-indigo-500/50"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option><option value="24">24x</option></select></div>
+                      
+                      {/* NOVO: OPÇÃO DE DIVISÃO TOTAL VS PARCELA */}
+                      {!isRecurring && parseInt(installments) > 1 && (
+                        <div className="col-span-3 bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex gap-2 mt-1">
+                          <button type="button" onClick={() => setAmountMode("total")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'total' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é o TOTAL</button>
+                          <button type="button" onClick={() => setAmountMode("installment")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'installment' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é a PARCELA</button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

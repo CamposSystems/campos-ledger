@@ -10,18 +10,10 @@ import {
 /* =========================================================================
    ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
 ========================================================================= */
-// import { createClient } from "@supabase/supabase-js";
-// import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 
-/* =========================================================================
-   ⚠️ E APAGUE ESTE BLOCO MOCK INTEIRO ANTES DE ENVIAR PARA O GITHUB:
-========================================================================= */
-const createClient = (url: any, key: any) => ({
-  auth: { getSession: async () => ({ data: { session: null }, error: null }), signOut: async () => {} },
-  from: () => ({ select: () => ({ eq: () => ({ order: async () => ({ data: [] }), gte: () => ({ lte: () => ({ data: [] }) }) }) }) })
-});
-const useRouter = () => ({ push: (path: string) => console.log("Navegar:", path) });
-/* ========================================================================= */
+
 
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
