@@ -1,11 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote } from "lucide-react";
+// O erro estava aqui: faltava o ArrowRight nesta lista!
+import { ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote } from "lucide-react";
 
-// IMPORTAÇÕES OFICIAIS PARA PRODUÇÃO
+/* =========================================================================
+   ⚠️ ATENÇÃO CHARLES: NO SEU VS CODE, DESCOMENTE AS 2 LINHAS ABAIXO:
+========================================================================= */
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+
+
 
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
