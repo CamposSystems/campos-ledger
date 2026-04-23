@@ -1,19 +1,23 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-// O Receipt foi adicionado ao final desta lista!
-import { ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, CheckCircle2, AlertCircle, RefreshCw, Banknote, Receipt } from "lucide-react";
+import { 
+  ArrowLeft, ArrowRight, CreditCard, Calendar as CalendarIcon, 
+  CheckCircle2, RefreshCw, Banknote, Receipt, Info 
+} from "lucide-react";
 
-// IMPORTAÇÕES OFICIAIS PARA PRODUÇÃO
+// IMPORTAÇÕES OFICIAIS (PRONTAS PARA PRODUÇÃO)
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
-// INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
 
 export default function FaturasPage() {
   const router = useRouter();
@@ -37,7 +41,10 @@ export default function FaturasPage() {
     setLoading(true);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) return router.push("/login");
+      
+      if (sessionError || !session) {
+        return router.push("/login");
+      }
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -63,6 +70,7 @@ export default function FaturasPage() {
       const [cardsRes, accRes, txRes] = await Promise.all([
         supabase.from("credit_cards").select("*").eq("family_id", familyId).order("name"),
         supabase.from("accounts").select("*").eq("family_id", familyId),
+        // Busca todas as transações de crédito para o motor calcular os meses
         supabase.from("transactions").select("*").eq("family_id", familyId).eq("payment_method", "credit")
       ]);
       
@@ -72,33 +80,74 @@ export default function FaturasPage() {
           setSelectedCardId(cardsRes.data[0].id);
         }
       }
-      if (accRes.data) setAccounts(accRes.data);
-      if (txRes.data) setAllTransactions(txRes.data);
+      
+      if (accRes.data) {
+        setAccounts(accRes.data);
+      }
+      
+      if (txRes.data) {
+        setAllTransactions(txRes.data);
+      }
     } catch (e) {
-      console.error("Erro ao carregar dados:", e);
+      console.error(e);
     }
   }
 
   const selectedCard = creditCards.find(c => c.id === selectedCardId);
   const linkedAccount = accounts.find(a => a.id === selectedCard?.account_id);
 
-  // Filtra as transações do cartão selecionado PARA O MÊS SELECIONADO
+  // =========================================================================
+  // MOTOR BANCÁRIO: CÁLCULO EXATO DA FATURA
+  // =========================================================================
   const currentMonthTransactions = useMemo(() => {
-    if (!selectedCardId) return [];
+    if (!selectedCardId || !selectedCard) return [];
     
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+    const viewingYear = currentDate.getFullYear();
+    const viewingMonth = currentDate.getMonth();
 
     return allTransactions.filter(tx => {
       if (tx.credit_card_id !== selectedCardId) return false;
-      const txDate = new Date(tx.date + "T12:00:00");
-      return txDate.getFullYear() === year && txDate.getMonth() === month;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [allTransactions, selectedCardId, currentDate]);
+      
+      // Limpa a data para evitar saltos de timezone
+      const cleanDate = tx.date.split('T')[0].split(' ')[0];
+      const txDate = new Date(cleanDate + "T12:00:00");
+      
+      const txDay = txDate.getDate();
+      let invoiceMonth = txDate.getMonth();
+      let invoiceYear = txDate.getFullYear();
+
+      // Regra A: Vencimento ocorre no mesmo mês do fecho (ex: Fecha dia 10, Vence dia 20)
+      if (selectedCard.closing_day < selectedCard.due_day) {
+        if (txDay >= selectedCard.closing_day) {
+          invoiceMonth += 1;
+        }
+      } 
+      // Regra B: Vencimento ocorre no mês SEGUINTE ao fecho (ex: Fecha dia 28, Vence dia 10)
+      else {
+        invoiceMonth += 1; // Por padrão, já cobra no mês seguinte
+        if (txDay >= selectedCard.closing_day) {
+          invoiceMonth += 1; // Se passou do fecho, pula mais um mês
+        }
+      }
+
+      // Normaliza viradas de ano (Dezembro -> Janeiro)
+      invoiceYear += Math.floor(invoiceMonth / 12);
+      invoiceMonth = invoiceMonth % 12;
+
+      // Retorna true se a parcela cair exatamente no mês que estamos a olhar
+      return invoiceYear === viewingYear && invoiceMonth === viewingMonth;
+
+    }).sort((a, b) => {
+      // Ordena por data (mais recentes primeiro)
+      const d1 = new Date(a.date.split('T')[0].split(' ')[0] + "T12:00:00");
+      const d2 = new Date(b.date.split('T')[0].split(' ')[0] + "T12:00:00");
+      return d2.getTime() - d1.getTime();
+    });
+  }, [allTransactions, selectedCardId, currentDate, selectedCard]);
 
   const invoiceStats = useMemo(() => {
-    let total = 0;
-    let pending = 0;
+    let total = 0; 
+    let pending = 0; 
     let isClosed = false;
 
     currentMonthTransactions.forEach(tx => {
@@ -109,27 +158,45 @@ export default function FaturasPage() {
 
     if (selectedCard) {
       const today = new Date();
-      const closingDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCard.closing_day);
-      if (today >= closingDate) isClosed = true;
+      // Define a data de corte da fatura que estamos a ver
+      let closingDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCard.closing_day);
+      
+      // Ajuste: Se o vencimento for no mês seguinte (Regra B), o fecho real ocorreu no mês passado
+      if (selectedCard.closing_day > selectedCard.due_day) {
+         closingDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, selectedCard.closing_day);
+      }
+
+      if (today >= closingDate) {
+        isClosed = true;
+      }
     }
 
-    return { total, pending, isClosed, allPaid: total > 0 && pending === 0 };
+    return { 
+      total, 
+      pending, 
+      isClosed, 
+      allPaid: total > 0 && pending === 0 
+    };
   }, [currentMonthTransactions, selectedCard, currentDate]);
 
   async function handlePayInvoice() {
-    if (!selectedCard || !linkedAccount) return alert("Erro: Cartão ou conta não encontrada.");
+    if (!selectedCard || !linkedAccount) {
+      return alert("Erro: Cartão ou conta de débito não encontrada.");
+    }
     
     const pendingTxs = currentMonthTransactions.filter(t => t.status === 'pending');
-    if (pendingTxs.length === 0) return alert("Não há valores pendentes nesta fatura para pagar.");
+    if (pendingTxs.length === 0) {
+      return alert("Não há valores pendentes nesta fatura para pagar.");
+    }
 
     const amountToPay = pendingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const confirm = window.confirm(`Deseja registar o pagamento de R$ ${amountToPay.toFixed(2)} da sua conta ${linkedAccount.name}?`);
+    const confirm = window.confirm(`Deseja registar o pagamento de R$ ${amountToPay.toLocaleString('pt-BR', {minimumFractionDigits: 2})} da sua conta ${linkedAccount.name}?`);
     
     if (!confirm) return;
 
     setBusy(true);
     try {
-      // 1. Marcar todas as compras do cartão como pagas
+      // 1. Marcar as compras individuais desta fatura como pagas
       const txIds = pendingTxs.map(t => t.id);
       const { error: updateError } = await supabase
         .from("transactions")
@@ -138,7 +205,7 @@ export default function FaturasPage() {
       
       if (updateError) throw updateError;
 
-      // 2. Lançar o pagamento na conta corrente real para abater o saldo
+      // 2. Lançar o débito do pagamento na conta real
       const { error: insertError } = await supabase.from("transactions").insert([{
         family_id: userProfile.family_id,
         profile_id: userProfile.id,
@@ -170,7 +237,9 @@ export default function FaturasPage() {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-white">
         <RefreshCw className="w-10 h-10 text-zinc-600 animate-spin mb-4" />
-        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 animate-pulse">A Carregar Faturas</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 animate-pulse">
+          A Carregar Faturas
+        </p>
       </div>
     );
   }
@@ -180,12 +249,19 @@ export default function FaturasPage() {
       <header className="sticky top-0 z-30 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900 px-4 py-4">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push("/")} className="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 rounded-xl flex items-center justify-center transition">
+            <button 
+              onClick={() => router.push("/")} 
+              className="w-10 h-10 bg-zinc-900 hover:bg-zinc-800 rounded-xl flex items-center justify-center transition"
+            >
               <ArrowLeft className="w-4 h-4 text-zinc-400 hover:text-white" />
             </button>
             <div>
-              <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Gestor de</p>
-              <p className="text-sm font-bold text-white tracking-tight">Faturas & Cartões</p>
+              <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">
+                Gestor de
+              </p>
+              <p className="text-sm font-bold text-white tracking-tight">
+                Faturas & Cartões
+              </p>
             </div>
           </div>
         </div>
@@ -200,7 +276,11 @@ export default function FaturasPage() {
               <button 
                 key={card.id} 
                 onClick={() => setSelectedCardId(card.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border whitespace-nowrap transition-all ${selectedCardId === card.id ? 'bg-purple-900/20 border-purple-500/50 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border whitespace-nowrap transition-all ${
+                  selectedCardId === card.id 
+                    ? 'bg-purple-900/20 border-purple-500/50 text-white' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
               >
                 <CreditCard className={`w-4 h-4 ${selectedCardId === card.id ? 'text-purple-400' : ''}`} />
                 <span className="text-xs font-bold">{card.name}</span>
@@ -216,12 +296,15 @@ export default function FaturasPage() {
         {selectedCard && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             
+            {/* NAVEGAÇÃO DE MÊS DA FATURA */}
             <div className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2 rounded-2xl">
               <button onClick={prevMonth} className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition">
                 <ArrowLeft className="w-4 h-4" />
               </button>
               <div className="flex flex-col items-center">
-                <span className="text-sm font-black tracking-tighter uppercase text-white">{MESES[currentDate.getMonth()]} {currentDate.getFullYear()}</span>
+                <span className="text-sm font-black tracking-tighter uppercase text-white">
+                  {MESES[currentDate.getMonth()]} {currentDate.getFullYear()}
+                </span>
               </div>
               <button onClick={nextMonth} className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition">
                 <ArrowRight className="w-4 h-4" />
@@ -236,12 +319,18 @@ export default function FaturasPage() {
               
               <div className="relative z-10 flex justify-between items-start mb-6">
                 <div>
-                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em]">Total da Fatura</p>
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em]">
+                    Total da Fatura
+                  </p>
                   <h2 className="text-4xl font-black text-white mt-1">
-                    <span className="text-xl text-zinc-500 mr-1">R$</span>{invoiceStats.total.toFixed(2).replace('.', ',')}
+                    <span className="text-xl text-zinc-500 mr-1">R$</span>
+                    {invoiceStats.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                   </h2>
                 </div>
-                <div className={`px-3 py-1.5 rounded-lg border ${invoiceStats.allPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : (invoiceStats.isClosed ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400')}`}>
+                <div className={`px-3 py-1.5 rounded-lg border ${
+                  invoiceStats.allPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 
+                  (invoiceStats.isClosed ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400')
+                }`}>
                   <p className="text-[9px] font-black uppercase tracking-widest">
                     {invoiceStats.allPaid ? 'Paga' : (invoiceStats.isClosed ? 'Fechada' : 'Aberta')}
                   </p>
@@ -250,12 +339,20 @@ export default function FaturasPage() {
 
               <div className="grid grid-cols-2 gap-4 relative z-10">
                 <div>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Vencimento</p>
-                  <p className="text-sm font-bold text-zinc-300 flex items-center gap-1"><CalendarIcon className="w-3 h-3 text-red-400"/> Dia {selectedCard.due_day}</p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">
+                    Vencimento
+                  </p>
+                  <p className="text-sm font-bold text-zinc-300 flex items-center gap-1">
+                    <CalendarIcon className="w-3 h-3 text-red-400"/> Dia {selectedCard.due_day}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Débito em Conta</p>
-                  <p className="text-sm font-bold text-zinc-300 flex items-center gap-1 truncate"><Banknote className="w-3 h-3 text-emerald-400"/> {linkedAccount?.name || 'Não definida'}</p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">
+                    Débito em Conta
+                  </p>
+                  <p className="text-sm font-bold text-zinc-300 flex items-center gap-1 truncate">
+                    <Banknote className="w-3 h-3 text-emerald-400"/> {linkedAccount?.name || 'Não definida'}
+                  </p>
                 </div>
               </div>
 
@@ -267,29 +364,49 @@ export default function FaturasPage() {
                   className="w-full mt-6 bg-purple-600 hover:bg-purple-500 text-white font-black py-4 rounded-xl transition uppercase tracking-widest text-xs disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Pagar R$ {invoiceStats.pending.toFixed(2).replace('.', ',')}
+                  Pagar R$ {invoiceStats.pending.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                 </button>
               )}
             </div>
 
             {/* LISTA DE COMPRAS */}
             <div>
-              <h3 className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Detalhes da Fatura</h3>
+              <h3 className="text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">
+                Detalhes da Fatura
+              </h3>
               
               {currentMonthTransactions.length === 0 ? (
                  <div className="text-center py-8 bg-zinc-900/30 rounded-2xl border border-zinc-800 border-dashed">
                    <p className="text-sm text-zinc-500 font-bold">Nenhuma compra nesta fatura.</p>
+                   <div className="flex items-center justify-center gap-2 mt-3 bg-purple-500/10 text-purple-400 p-3 rounded-xl mx-4">
+                     <Info className="w-4 h-4 shrink-0" />
+                     <p className="text-[9px] text-left">
+                       As compras lançadas ficam agrupadas aqui de acordo com o <strong>dia de fecho</strong> do cartão.
+                     </p>
+                   </div>
                  </div>
               ) : (
                 <div className="space-y-3">
                   {currentMonthTransactions.map(tx => {
                     const isPaid = tx.status === 'completed';
+                    
+                    // Tratamento seguro da data para exibição (data em que a compra ocorreu)
+                    const cleanDate = tx.date.split('T')[0].split(' ')[0];
+                    const dateObj = new Date(cleanDate + "T12:00:00");
+                    const formattedDate = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    
                     return (
                       <div key={tx.id} className={`flex justify-between items-center p-4 rounded-2xl border ${isPaid ? 'bg-zinc-900/50 border-zinc-800/50' : 'bg-zinc-900 border-zinc-800'}`}>
+                        
                         <div className="min-w-0 flex-1 pr-4">
-                          <p className={`text-sm font-bold truncate ${isPaid ? 'text-zinc-500 line-through' : 'text-white'}`}>{tx.description}</p>
+                          <p className={`text-sm font-bold truncate ${isPaid ? 'text-zinc-500 line-through' : 'text-white'}`}>
+                            {tx.description}
+                          </p>
+                          
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">{tx.date.split('-').reverse().join('/')}</span>
+                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">
+                              {formattedDate}
+                            </span>
                             {tx.installments_total > 1 && (
                               <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-black">
                                 {tx.installment_current}/{tx.installments_total}
@@ -297,9 +414,13 @@ export default function FaturasPage() {
                             )}
                           </div>
                         </div>
+                        
                         <div className="shrink-0 text-right">
-                          <p className={`text-sm font-black ${isPaid ? 'text-zinc-600' : 'text-zinc-300'}`}>R$ {Number(tx.amount).toFixed(2).replace('.', ',')}</p>
+                          <p className={`text-sm font-black ${isPaid ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                            R$ {Number(tx.amount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          </p>
                         </div>
+                        
                       </div>
                     );
                   })}

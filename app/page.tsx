@@ -24,7 +24,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -48,7 +51,6 @@ export default function Dashboard() {
   const [adjustAccountId, setAdjustAccountId] = useState("");
   const [newBalance, setNewBalance] = useState("");
 
-  // Estados do Modal de Criação
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [modalType, setModalType] = useState<"expense" | "income" | "transfer">("expense");
@@ -60,12 +62,10 @@ export default function Dashboard() {
   const [installments, setInstallments] = useState("1");
   const [isPaid, setIsPaid] = useState(true);
   
-  // Lógica de Parcelas
   const [amountMode, setAmountMode] = useState<"total" | "installment">("total"); 
   const [isRecurring, setIsRecurring] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false); 
 
-  // Desconto em Folha
   const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
   const [deductionOwner, setDeductionOwner] = useState("");
   const [deductionItem, setDeductionItem] = useState("");
@@ -91,6 +91,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
       if (sessionError || !session) return router.push("/login");
 
       const { data: profile } = await supabase
@@ -161,13 +162,12 @@ export default function Dashboard() {
     if (data) setTransactions(data);
   }
 
-  // CORREÇÃO 1: Remover o filtro de datas e status para que os cartões de crédito futuros apareçam globalmente
   async function fetchAllTransactions(familyId: string) {
     const { data } = await supabase
       .from("transactions")
       .select("*")
       .eq("family_id", familyId);
-
+      
     if (data) setAllTransactions(data);
   }
 
@@ -230,7 +230,6 @@ export default function Dashboard() {
     }
 
     const rowsToInsert = [];
-    const selCard = isCredit ? creditCards.find(c => c.id === selectedCardId) : null;
 
     for (let i = 0; i < totalInstallments; i++) {
       let rowDate = new Date(transactionDate + "T12:00:00");
@@ -240,22 +239,8 @@ export default function Dashboard() {
         rowStatus = (i === 0) ? (isPaid ? "completed" : "pending") : "pending";
       }
 
-      if (isCredit && selCard) {
-         const txDay = rowDate.getDate();
-         let dueMonth = rowDate.getMonth();
-         let dueYear = rowDate.getFullYear();
-
-         if (selCard.due_day < selCard.closing_day) dueMonth += 1;
-         if (txDay >= selCard.closing_day) dueMonth += 1;
-         dueMonth += i; 
-
-         dueYear += Math.floor(dueMonth / 12);
-         dueMonth = dueMonth % 12;
-
-         rowDate = new Date(dueYear, dueMonth, selCard.due_day, 12, 0, 0);
-      } else {
-         rowDate.setMonth(rowDate.getMonth() + i);
-      }
+      // Adiciona 'i' meses à data da compra para gerar as parcelas mensais na timeline
+      rowDate.setMonth(rowDate.getMonth() + i);
       
       let rowDesc = description.trim() || (modalType === 'transfer' ? 'Transferência' : (selectedCat?.name || "Lançamento"));
       if (totalInstallments > 1) {
@@ -436,7 +421,6 @@ export default function Dashboard() {
   const calculations = useMemo(() => {
     let realBalance = accounts.reduce((acc, curr) => acc + (Number(curr.initial_balance) || 0), 0);
     
-    // CORREÇÃO 2: Filtra o Real Balance apenas com os "completed" para não calcular o futuro 
     allTransactions.forEach(t => {
       if (t.payment_method === 'credit') return; 
       if (t.status !== 'completed') return;
@@ -463,7 +447,6 @@ export default function Dashboard() {
         
         if (t.status === 'pending') {
           pendingExpense += val;
-          // CORREÇÃO DA LEITURA DE DATA: Ignora o +00 no fuso
           const cleanDate = t.date.split('T')[0].split(' ')[0];
           const txDate = new Date(cleanDate + "T12:00:00");
           txDate.setHours(0,0,0,0);
@@ -501,7 +484,6 @@ export default function Dashboard() {
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
     transactions.forEach(t => {
-      // CORREÇÃO DA LEITURA DE DATA DO GRUPO
       const dateStr = t.date.split('T')[0].split(' ')[0];
       if (!groups[dateStr]) groups[dateStr] = [];
       groups[dateStr].push(t);
@@ -806,7 +788,7 @@ export default function Dashboard() {
                                 </p>
                               )}
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'text-emerald-500' : 'text-zinc-500'}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'textemerald-500' : 'text-zinc-500'}`}>
                                   {catInfo?.name || "Transferência"}
                                 </span>
                                 <span className="text-[8px] bg-zinc-800/50 text-zinc-400 px-1.5 py-0.5 rounded-md flex items-center gap-1">
@@ -880,7 +862,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* MODAL DE EDIÇÃO DE TRANSAÇÃO (NOVO) */}
+      {/* MODAL DE EDIÇÃO DE TRANSAÇÃO */}
       {editingTx && (
         <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 pointer-events-auto">
           <div className="bg-zinc-950 border border-zinc-800 rounded-[2.5rem] p-6 w-full max-w-sm relative">
@@ -1001,9 +983,6 @@ export default function Dashboard() {
                 }
               }} className="space-y-8">
                 
-                {/* =======================
-                    PASSO 1: VALOR E CATEGORIA 
-                    ======================= */}
                 {modalStep === 1 && (
                   <div className="animate-in slide-in-from-left-4 fade-in">
                     <div className="flex bg-zinc-900 p-1.5 rounded-2xl mb-8">
@@ -1094,13 +1073,9 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {/* =======================
-                    PASSO 2: PAGAMENTO E DATAS 
-                    ======================= */}
                 {modalStep === 2 && (
                   <div className="animate-in slide-in-from-right-4 fade-in space-y-6">
                     
-                    {/* 1. SELEÇÃO DE MÉTODO DE PAGAMENTO MASTER */}
                     <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
                        <p className="text-[10px] text-zinc-400 font-bold uppercase mb-3">Método de Pagamento</p>
                        <select value={paymentMethod} onChange={(e) => {
@@ -1116,7 +1091,6 @@ export default function Dashboard() {
                        </select>
                     </div>
 
-                    {/* 2. CONTA OU CARTÃO ALVO */}
                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
                         <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">{paymentMethod === 'credit' ? 'Qual Cartão?' : 'Debitar/Creditar em qual conta?'}</p>
                         {paymentMethod === 'credit' ? (
@@ -1132,11 +1106,9 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* 3. DATAS E PARCELAS/PREVISÕES */}
                     <div className="grid grid-cols-2 gap-3">
                        <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data da Compra / Vencimento</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
                        
-                       {/* Se for Crédito ou Carnê -> Permite Parcelar */}
                        {(paymentMethod === 'credit' || paymentMethod === 'carne') && (
                          <>
                            <div className="col-span-2">
@@ -1152,7 +1124,6 @@ export default function Dashboard() {
                          </>
                        )}
 
-                       {/* Se for PIX/Debito/Auto/Dinheiro -> Permite Repetição Mensal */}
                        {(paymentMethod !== 'credit' && paymentMethod !== 'carne') && (
                           <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-4 rounded-xl border border-zinc-800 mt-2">
                              <div>
@@ -1171,7 +1142,6 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* STATUS DE PREVISÃO (PREVISTO VS REALIZADO) */}
                     {paymentMethod !== 'credit' && paymentMethod !== 'carne' && (
                       <div className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 mt-4">
                         <div>
