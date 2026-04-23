@@ -18,6 +18,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
 
+
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -47,7 +48,7 @@ export default function Dashboard() {
   const [adjustAccountId, setAdjustAccountId] = useState("");
   const [newBalance, setNewBalance] = useState("");
 
-  // Estados do Modal de Criação (Em 2 Passos)
+  // Estados do Modal de Criação
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [modalType, setModalType] = useState<"expense" | "income" | "transfer">("expense");
@@ -74,7 +75,6 @@ export default function Dashboard() {
   const [selectedCardId, setSelectedCardId] = useState("");
   const [destinationAccountId, setDestinationAccountId] = useState("");
 
-  // Estado de Edição Rápida
   const [editingTx, setEditingTx] = useState<any>(null); 
 
   useEffect(() => {
@@ -161,16 +161,12 @@ export default function Dashboard() {
     if (data) setTransactions(data);
   }
 
+  // CORREÇÃO 1: Remover o filtro de datas e status para que os cartões de crédito futuros apareçam globalmente
   async function fetchAllTransactions(familyId: string) {
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
     const { data } = await supabase
       .from("transactions")
       .select("*")
-      .eq("family_id", familyId)
-      .lte("date", todayEnd.toISOString())
-      .eq("status", "completed"); 
+      .eq("family_id", familyId);
 
     if (data) setAllTransactions(data);
   }
@@ -213,7 +209,6 @@ export default function Dashboard() {
       }
     }
     
-    // CORREÇÃO CRÍTICA: Gerador universal de UUID para evitar rejeição no Supabase em compras parceladas
     const generateUUID = () => {
       if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
@@ -441,8 +436,10 @@ export default function Dashboard() {
   const calculations = useMemo(() => {
     let realBalance = accounts.reduce((acc, curr) => acc + (Number(curr.initial_balance) || 0), 0);
     
+    // CORREÇÃO 2: Filtra o Real Balance apenas com os "completed" para não calcular o futuro 
     allTransactions.forEach(t => {
       if (t.payment_method === 'credit') return; 
+      if (t.status !== 'completed') return;
       
       const val = Number(t.amount) || 0;
       if (t.type === 'income') realBalance += val;
@@ -466,7 +463,9 @@ export default function Dashboard() {
         
         if (t.status === 'pending') {
           pendingExpense += val;
-          const txDate = new Date(t.date + "T12:00:00");
+          // CORREÇÃO DA LEITURA DE DATA: Ignora o +00 no fuso
+          const cleanDate = t.date.split('T')[0].split(' ')[0];
+          const txDate = new Date(cleanDate + "T12:00:00");
           txDate.setHours(0,0,0,0);
           const diffTime = txDate.getTime() - today.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -502,7 +501,8 @@ export default function Dashboard() {
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
     transactions.forEach(t => {
-      const dateStr = t.date;
+      // CORREÇÃO DA LEITURA DE DATA DO GRUPO
+      const dateStr = t.date.split('T')[0].split(' ')[0];
       if (!groups[dateStr]) groups[dateStr] = [];
       groups[dateStr].push(t);
     });
@@ -1140,10 +1140,8 @@ export default function Dashboard() {
                        {(paymentMethod === 'credit' || paymentMethod === 'carne') && (
                          <>
                            <div className="col-span-2">
-                             <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Parcelas</p>
-                             <select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none">
-                               {[1,2,3,4,5,6,10,12,24].map(n => <option key={n} value={n}>{n}x</option>)}
-                             </select>
+                             <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Parcelas (Qtd)</p>
+                             <input type="number" min="1" max="120" value={installments} onChange={(e) => setInstallments(e.target.value)} placeholder="Ex: 5" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" />
                            </div>
                            {parseInt(installments) > 1 && (
                              <div className="col-span-2 flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 gap-1 mt-1">
@@ -1169,12 +1167,7 @@ export default function Dashboard() {
                     {isRecurring && (
                         <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-2xl">
                            <p className="text-[10px] text-indigo-400 font-bold uppercase mb-2">Por quantos meses quer projetar?</p>
-                           <select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-950 border border-indigo-500/30 rounded-xl px-4 py-3 text-sm text-indigo-300 outline-none appearance-none">
-                             <option value="1">Apenas este mês</option>
-                             <option value="6">Próximos 6 meses</option>
-                             <option value="12">Próximo 1 ano</option>
-                             <option value="24">Próximos 2 anos</option>
-                           </select>
+                           <input type="number" min="1" max="120" value={installments} onChange={(e) => setInstallments(e.target.value)} placeholder="Ex: 12" className="w-full bg-zinc-950 border border-indigo-500/30 rounded-xl px-4 py-3 text-sm text-indigo-300 outline-none focus:border-indigo-500" />
                         </div>
                     )}
 
