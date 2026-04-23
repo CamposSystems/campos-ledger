@@ -60,9 +60,9 @@ export default function Dashboard() {
   const [isPaid, setIsPaid] = useState(true);
   
   // Lógica de Parcelas
-  const [amountMode, setAmountMode] = useState<"total" | "installment">("total"); // NOVO: Define se o valor é o Total ou o da Parcela
+  const [amountMode, setAmountMode] = useState<"total" | "installment">("total"); 
   const [isRecurring, setIsRecurring] = useState(false);
-  const [sendingEmail, setSendingEmail] = useState(false); // Adicionado estado do E-mail
+  const [sendingEmail, setSendingEmail] = useState(false); 
 
   // Desconto em Folha
   const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
@@ -75,7 +75,7 @@ export default function Dashboard() {
   const [destinationAccountId, setDestinationAccountId] = useState("");
 
   // Estado de Edição Rápida
-  const [editingTx, setEditingTx] = useState<any>(null); // NOVO: Controla a edição de transações
+  const [editingTx, setEditingTx] = useState<any>(null); 
 
   useEffect(() => {
     initApp();
@@ -204,18 +204,27 @@ export default function Dashboard() {
     const selectedCat = categories.find(c => c.id === categoryId);
     const totalInstallments = parseInt(installments) || 1;
     
-    // NOVO: LÓGICA DE DIVISÃO TOTAL VS PARCELA
     let installmentAmount = numAmount;
     if (totalInstallments > 1 && !isRecurring) {
       if (amountMode === "total") {
         installmentAmount = Number((numAmount / totalInstallments).toFixed(2));
       } else {
-        // Se escolheu 'installment', o installmentAmount é exatamente o valor digitado.
         installmentAmount = numAmount; 
       }
     }
     
-    const parentId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'id-' + new Date().getTime();
+    // CORREÇÃO CRÍTICA: Gerador universal de UUID para evitar rejeição no Supabase em compras parceladas
+    const generateUUID = () => {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+
+    const parentId = generateUUID();
 
     let finalNotes = null;
     if (modalType === 'expense' && isPayrollDeduction) {
@@ -241,12 +250,10 @@ export default function Dashboard() {
          let dueMonth = rowDate.getMonth();
          let dueYear = rowDate.getFullYear();
 
-         // Regra de negócio real de Fatura de Cartões
          if (selCard.due_day < selCard.closing_day) dueMonth += 1;
          if (txDay >= selCard.closing_day) dueMonth += 1;
          dueMonth += i; 
 
-         // CORREÇÃO: Garante a virada de ano correta para compras parceladas
          dueYear += Math.floor(dueMonth / 12);
          dueMonth = dueMonth % 12;
 
@@ -260,7 +267,6 @@ export default function Dashboard() {
         rowDesc = isRecurring ? `${rowDesc} (Mês ${i + 1}/${totalInstallments})` : `${rowDesc} (${i + 1}/${totalInstallments})`;
       }
 
-      // CORREÇÃO ABSOLUTA: Formatação manual para blindar contra falhas de fuso horário
       const safeYear = rowDate.getFullYear();
       const safeMonth = String(rowDate.getMonth() + 1).padStart(2, '0');
       const safeDay = String(rowDate.getDate()).padStart(2, '0');
@@ -317,7 +323,6 @@ export default function Dashboard() {
     }
   }
 
-  // NOVO: Função para atualizar Transação individualmente
   async function handleUpdateTransaction(e: React.FormEvent) {
     e.preventDefault();
     if (!editingTx) return;
@@ -542,6 +547,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: userProfile.email,
+          family_id: userProfile.family_id,
           subject: `📊 Seu Relatório Camp.OS Ledger - ${new Date().toLocaleDateString('pt-BR')}`,
           name: userProfile.display_name?.split(' ')[0] || 'Usuário',
           balance: calculations.realBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
@@ -835,7 +841,6 @@ export default function Dashboard() {
                               </p>
                               
                               <div className="flex items-center gap-1">
-                                {/* NOVO: Botão de Editar */}
                                 <button 
                                   onClick={() => setEditingTx({ ...tx, amount: String(tx.amount).replace(".", ",") })}
                                   className="p-1 bg-zinc-800 text-zinc-400 hover:text-white rounded-md transition-colors"
