@@ -7,11 +7,13 @@ import {
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil, User, ChevronUp
+  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil, User, ChevronUp, ArrowRightLeft
 } from "lucide-react";
 
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -267,11 +269,12 @@ export default function Dashboard() {
 
       rowsToInsert.push(baseTx);
 
+      // Se for transferência, cria a perna de "Entrada" na conta de destino
       if (modalType === 'transfer') {
          rowsToInsert.push({
            ...baseTx,
            type: 'income',
-           account_id: destinationAccountId,
+           account_id: destinationAccountId, // Conta de entrada
            description: `${rowDesc} (Recebimento)`,
            notes: null
          });
@@ -447,7 +450,6 @@ export default function Dashboard() {
     };
   }, [transactions, allTransactions, accounts]);
 
-  // Conta os saldos individuais de cada conta
   const accountBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     accounts.forEach(acc => balances[acc.id] = Number(acc.initial_balance) || 0);
@@ -1039,7 +1041,6 @@ export default function Dashboard() {
                 {modalStep === 2 && (
                   <div className="animate-in slide-in-from-right-4 fade-in space-y-6">
                     
-                    {/* 1. SELEÇÃO DE MÉTODO DE PAGAMENTO MASTER */}
                     <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
                        <p className="text-[10px] text-zinc-400 font-bold uppercase mb-3">Método de Pagamento</p>
                        <select value={paymentMethod} onChange={(e) => {
@@ -1055,27 +1056,43 @@ export default function Dashboard() {
                        </select>
                     </div>
 
-                    {/* 2. CONTA OU CARTÃO ALVO */}
-                    <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">{paymentMethod === 'credit' ? 'Qual Cartão?' : 'Debitar/Creditar em qual conta?'}</p>
-                        {paymentMethod === 'credit' ? (
-                           <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none appearance-none font-bold">
-                             <option value="">Escolha um cartão...</option>
-                             {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                           </select>
-                        ) : (
-                           <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none font-bold">
-                             <option value="">Escolha uma conta...</option>
-                             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                           </select>
-                        )}
-                    </div>
+                    {modalType === 'transfer' ? (
+                       <div className="grid grid-cols-2 gap-3 bg-blue-900/10 p-4 rounded-2xl border border-blue-900/30">
+                          <div>
+                             <p className="text-[10px] text-blue-400 font-bold uppercase mb-2 flex items-center gap-1"><ArrowRightLeft className="w-3 h-3"/> Origem (Sai)</p>
+                             <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-950 border border-blue-900/50 rounded-xl px-3 py-3 text-sm text-white outline-none appearance-none font-bold">
+                               <option value="">Selecione...</option>
+                               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                             </select>
+                          </div>
+                          <div>
+                             <p className="text-[10px] text-emerald-400 font-bold uppercase mb-2">Destino (Entra)</p>
+                             <select required value={destinationAccountId} onChange={(e) => setDestinationAccountId(e.target.value)} className="w-full bg-zinc-950 border border-emerald-900/50 rounded-xl px-3 py-3 text-sm text-white outline-none appearance-none font-bold">
+                               <option value="">Selecione...</option>
+                               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                             </select>
+                          </div>
+                       </div>
+                    ) : (
+                       <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
+                           <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">{paymentMethod === 'credit' ? 'Qual Cartão?' : 'Debitar/Creditar em qual conta?'}</p>
+                           {paymentMethod === 'credit' ? (
+                              <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none appearance-none font-bold">
+                                <option value="">Escolha um cartão...</option>
+                                {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                           ) : (
+                              <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none font-bold">
+                                <option value="">Escolha uma conta...</option>
+                                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                           )}
+                       </div>
+                    )}
 
-                    {/* 3. DATAS E PARCELAS/PREVISÕES */}
                     <div className="grid grid-cols-2 gap-3">
                        <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data da Compra / Vencimento</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
                        
-                       {/* Se for Crédito ou Carnê -> Permite Parcelar */}
                        {(paymentMethod === 'credit' || paymentMethod === 'carne') && (
                          <>
                            <div className="col-span-2">
@@ -1091,7 +1108,6 @@ export default function Dashboard() {
                          </>
                        )}
 
-                       {/* Se for PIX/Debito/Auto/Dinheiro -> Permite Repetição Mensal */}
                        {(paymentMethod !== 'credit' && paymentMethod !== 'carne') && (
                           <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-4 rounded-xl border border-zinc-800 mt-2">
                              <div>
@@ -1110,7 +1126,6 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* STATUS DE PREVISÃO (PREVISTO VS REALIZADO) */}
                     {paymentMethod !== 'credit' && paymentMethod !== 'carne' && (
                       <div className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 mt-4">
                         <div>
