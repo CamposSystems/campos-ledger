@@ -2,17 +2,21 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { 
-  ArrowLeft, ArrowRight, Plus, Wallet, 
+  ArrowLeft, ArrowRight, Plus, Wallet, Target,
   TrendingUp, TrendingDown, Clock, CheckCircle2, 
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil
+  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil, User
 } from "lucide-react";
 
-// IMPORTAÇÕES OFICIAIS PARA PRODUÇÃO
+/* =========================================================================
+   ⚠️ ATENÇÃO CHARLES: PARA O SEU VS CODE E VERCEL, USE AS IMPORTAÇÕES REAIS:
+   Descomente as duas linhas abaixo e apague o bloco MOCK a seguir.
+========================================================================= */
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+
 
 // INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -58,6 +62,7 @@ export default function Dashboard() {
   // Lógica de Parcelas
   const [amountMode, setAmountMode] = useState<"total" | "installment">("total"); // NOVO: Define se o valor é o Total ou o da Parcela
   const [isRecurring, setIsRecurring] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false); // Adicionado estado do E-mail
 
   // Desconto em Folha
   const [isPayrollDeduction, setIsPayrollDeduction] = useState(false);
@@ -227,16 +232,25 @@ export default function Dashboard() {
       let rowDate = new Date(transactionDate + "T12:00:00");
       let rowStatus = "pending"; 
       
-      if (!isCredit) {
+      if (!isCredit && paymentMethod !== 'carne') {
         rowStatus = (i === 0) ? (isPaid ? "completed" : "pending") : "pending";
       }
 
       if (isCredit && selCard) {
          const txDay = rowDate.getDate();
-         let monthOffset = i;
-         if (txDay >= selCard.closing_day) { monthOffset += 1; }
-         rowDate.setMonth(rowDate.getMonth() + monthOffset);
-         rowDate = new Date(rowDate.getFullYear(), rowDate.getMonth(), selCard.due_day, 12, 0, 0);
+         let dueMonth = rowDate.getMonth();
+         let dueYear = rowDate.getFullYear();
+
+         // Regra de negócio real de Fatura de Cartões
+         if (selCard.due_day < selCard.closing_day) dueMonth += 1;
+         if (txDay >= selCard.closing_day) dueMonth += 1;
+         dueMonth += i; 
+
+         // CORREÇÃO: Garante a virada de ano correta para compras parceladas
+         dueYear += Math.floor(dueMonth / 12);
+         dueMonth = dueMonth % 12;
+
+         rowDate = new Date(dueYear, dueMonth, selCard.due_day, 12, 0, 0);
       } else {
          rowDate.setMonth(rowDate.getMonth() + i);
       }
@@ -246,6 +260,12 @@ export default function Dashboard() {
         rowDesc = isRecurring ? `${rowDesc} (Mês ${i + 1}/${totalInstallments})` : `${rowDesc} (${i + 1}/${totalInstallments})`;
       }
 
+      // CORREÇÃO ABSOLUTA: Formatação manual para blindar contra falhas de fuso horário
+      const safeYear = rowDate.getFullYear();
+      const safeMonth = String(rowDate.getMonth() + 1).padStart(2, '0');
+      const safeDay = String(rowDate.getDate()).padStart(2, '0');
+      const finalDateStr = `${safeYear}-${safeMonth}-${safeDay}`;
+
       const baseTx = {
         family_id: userProfile.family_id,
         profile_id: userProfile.id,
@@ -254,7 +274,7 @@ export default function Dashboard() {
         category_id: modalType === 'transfer' ? null : categoryId,
         category: modalType === 'transfer' ? 'Transferência' : (selectedCat?.name || 'Geral'), 
         description: rowDesc,
-        date: rowDate.toISOString().split("T")[0],
+        date: finalDateStr,
         payment_method: paymentMethod,
         status: rowStatus,
         installment_current: i + 1,
@@ -512,6 +532,34 @@ export default function Dashboard() {
   const favoriteCats = currentCats.filter(c => c.is_favorite);
   const parentCats = currentCats.filter(c => !c.parent_id);
 
+  async function handleSendReportEmail() {
+    if (!userProfile?.email) return alert("O seu perfil não tem um e-mail válido associado.");
+    
+    setSendingEmail(true);
+    try {
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: userProfile.email,
+          subject: `📊 Seu Relatório Camp.OS Ledger - ${new Date().toLocaleDateString('pt-BR')}`,
+          name: userProfile.display_name?.split(' ')[0] || 'Usuário',
+          balance: calculations.realBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
+          income: calculations.monthlyIncome.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
+          expense: calculations.monthlyExpense.toLocaleString('pt-BR', {minimumFractionDigits: 2})
+        })
+      });
+
+      if (!response.ok) throw new Error("Falha na API de envio.");
+      alert("Relatório Premium enviado para o seu e-mail com sucesso! Verifique a sua caixa de entrada.");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao enviar o e-mail. Verifique se configurou a API de e-mail.");
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 pb-24">
       
@@ -528,6 +576,9 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-2">
+            <button onClick={handleSendReportEmail} disabled={sendingEmail} className="p-2.5 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition disabled:opacity-50" title="Receber Relatório por E-mail">
+              {sendingEmail ? <RefreshCw className="w-5 h-5 animate-spin text-yellow-500" /> : <Bell className="w-5 h-5" />}
+            </button>
             <button onClick={() => router.push("/categorias")} className="p-2.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition" title="Gerir Categorias">
               <Calendar className="w-5 h-5" />
             </button>
@@ -658,18 +709,24 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-3 gap-2 mt-3">
+             <button onClick={() => router.push("/planejamento")} className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-3xl p-4 flex flex-col items-center justify-center gap-2 transition group shadow-lg">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition">
+                   <Target className="w-5 h-5" />
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white mt-1 text-center leading-tight">Metas<br/>& Previsto</span>
+             </button>
              <button onClick={() => router.push("/analytics")} className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-3xl p-4 flex flex-col items-center justify-center gap-2 transition group shadow-lg">
                 <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition">
                    <PieChart className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Dashboard Analítico</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white mt-1 text-center leading-tight">Dashboard<br/>Analítico</span>
              </button>
              <button onClick={() => router.push("/faturas")} className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-3xl p-4 flex flex-col items-center justify-center gap-2 transition group shadow-lg">
                 <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover:scale-110 transition">
                    <Receipt className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Faturas & Cartões</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white mt-1 text-center leading-tight">Faturas<br/>& Cartões</span>
              </button>
           </div>
         </section>
@@ -721,18 +778,22 @@ export default function Dashboard() {
                         const catInfo = categories.find(c => c.id === tx.category_id);
                         const parentCat = catInfo?.parent_id ? categories.find(c => c.id === catInfo.parent_id) : null;
                         const themeColor = parentCat?.color || catInfo?.color || 'zinc';
+                        const creatorName = familyMembers.find(m => m.id === tx.profile_id)?.display_name?.split(' ')[0] || 'Auto';
 
                         return (
-                          <div key={tx.id} className={`flex items-center gap-4 p-4 rounded-3xl border transition-all ${isCompleted ? 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700' : 'bg-zinc-950 border-zinc-800 border-dashed opacity-75'}`}>
+                          <div key={tx.id} className={`flex items-center gap-4 p-4 rounded-3xl border transition-all ${isCompleted ? 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700' : 'bg-zinc-950 border-amber-500/20 border-dashed opacity-80'}`}>
                             
                             <div className={`w-12 h-12 shrink-0 rounded-[1.1rem] bg-${themeColor}-500/10 text-${themeColor}-500 border border-${themeColor}-500/20 flex items-center justify-center text-xl overflow-hidden`}>
                               {catInfo?.logo_url ? <img src={catInfo.logo_url} alt="Logo" className="w-full h-full object-cover" /> : (catInfo?.icon || '📦')}
                             </div>
                             
                             <div className="flex-1 min-w-0">
-                              <p className={`font-black text-sm truncate ${isCompleted ? 'text-zinc-100' : 'text-zinc-400'}`}>
-                                {tx.description}
-                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-black text-sm truncate ${isCompleted ? 'text-zinc-100' : 'text-amber-500/90'}`}>
+                                  {tx.description}
+                                </p>
+                                {!isCompleted && <span className="text-[8px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-black uppercase">Previsto</span>}
+                              </div>
                               {tx.notes && (
                                 <p className="text-[10px] text-amber-500/80 truncate mt-0.5 font-medium">
                                   ↳ {tx.notes}
@@ -741,6 +802,9 @@ export default function Dashboard() {
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'text-emerald-500' : 'text-zinc-500'}`}>
                                   {catInfo?.name || "Transferência"}
+                                </span>
+                                <span className="text-[8px] bg-zinc-800/50 text-zinc-400 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                  <User className="w-2.5 h-2.5"/> {creatorName}
                                 </span>
                                 {tx.account_id && accounts.find(a => a.id === tx.account_id) && (
                                   <span className="text-[9px] bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -1031,68 +1095,96 @@ export default function Dashboard() {
                 {modalStep === 2 && (
                   <div className="animate-in slide-in-from-right-4 fade-in space-y-6">
                     
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Resumo do Lançamento</p>
-                        <p className="text-xl font-black text-white mt-1">R$ {amount || "0,00"}</p>
-                      </div>
-                      {modalType !== "transfer" && categoryId && (
-                        <div className="text-right">
-                           <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Categoria</p>
-                           <div className="bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 text-xs font-bold text-white">
-                             {categories.find(c => c.id === categoryId)?.name || "Selecionada"}
-                           </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Descrição (Opcional)</p><input type="text" placeholder="Ex: Almoço com a equipa" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
-                    
-                    <div className="grid grid-cols-3 gap-3 bg-zinc-900/30 p-4 border border-zinc-800/50 rounded-2xl">
-                      <div className="col-span-3 flex items-center justify-between mb-2">
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase flex items-center gap-1.5"><Repeat className="w-3 h-3"/> Repetição</p>
-                        <div className="flex bg-zinc-950 rounded-lg p-1 border border-zinc-800">
-                          <button type="button" onClick={() => setIsRecurring(false)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${!isRecurring ? 'bg-zinc-800 text-white' : 'text-zinc-500'}`}>Dividir</button>
-                          <button type="button" onClick={() => setIsRecurring(true)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-md transition-colors ${isRecurring ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500'}`}>Mensal Fixo</button>
-                        </div>
-                      </div>
-                      <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data Inicial</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
-                      <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{isRecurring ? "Meses" : "Parcelas"}</p><select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none focus:border-indigo-500/50"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option><option value="24">24x</option></select></div>
-                      
-                      {/* NOVO: OPÇÃO DE DIVISÃO TOTAL VS PARCELA */}
-                      {!isRecurring && parseInt(installments) > 1 && (
-                        <div className="col-span-3 bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex gap-2 mt-1">
-                          <button type="button" onClick={() => setAmountMode("total")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'total' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é o TOTAL</button>
-                          <button type="button" onClick={() => setAmountMode("installment")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'installment' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é a PARCELA</button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="col-span-2 md:col-span-1">
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Pagar/Receber com</p>
-                        <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50 appearance-none">
+                    {/* 1. SELEÇÃO DE MÉTODO DE PAGAMENTO MASTER */}
+                    <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+                       <p className="text-[10px] text-zinc-400 font-bold uppercase mb-3">Método de Pagamento</p>
+                       <select value={paymentMethod} onChange={(e) => {
+                         setPaymentMethod(e.target.value);
+                         if (e.target.value !== 'credit' && e.target.value !== 'carne') setInstallments("1");
+                       }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white font-bold outline-none appearance-none focus:border-indigo-500 transition-colors">
                           <option value="pix">PIX</option>
-                          <option value="debit">Débito</option>
+                          <option value="debit">Cartão de Débito</option>
                           {modalType !== 'transfer' && <option value="credit">Cartão de Crédito</option>}
-                          <option value="cash">Dinheiro / Espécie</option>
-                        </select>
-                      </div>
-                      <div className="col-span-2 md:col-span-1">
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">{paymentMethod === 'credit' ? 'Selecione o Cartão' : 'Selecione a Conta'}</p>
+                          <option value="auto_debit">Débito Automático (Água, Luz...)</option>
+                          {modalType !== 'transfer' && <option value="carne">Carnê / Boleto Parcelado</option>}
+                          <option value="cash">Dinheiro Vivo</option>
+                       </select>
+                    </div>
+
+                    {/* 2. CONTA OU CARTÃO ALVO */}
+                    <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">{paymentMethod === 'credit' ? 'Qual Cartão?' : 'Debitar/Creditar em qual conta?'}</p>
                         {paymentMethod === 'credit' ? (
-                           <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none appearance-none focus:border-purple-400">
+                           <select required value={selectedCardId} onChange={(e) => setSelectedCardId(e.target.value)} className="w-full bg-purple-900/20 text-purple-400 border border-purple-900/50 rounded-xl px-4 py-3 text-sm outline-none appearance-none font-bold">
                              <option value="">Escolha um cartão...</option>
                              {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                            </select>
                         ) : (
-                           <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none focus:border-indigo-500/50">
+                           <select required value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none font-bold">
                              <option value="">Escolha uma conta...</option>
                              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                            </select>
                         )}
-                      </div>
                     </div>
+
+                    {/* 3. DATAS E PARCELAS/PREVISÕES */}
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data da Compra / Vencimento</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
+                       
+                       {/* Se for Crédito ou Carnê -> Permite Parcelar */}
+                       {(paymentMethod === 'credit' || paymentMethod === 'carne') && (
+                         <>
+                           <div className="col-span-2">
+                             <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Parcelas</p>
+                             <select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none appearance-none">
+                               {[1,2,3,4,5,6,10,12,24].map(n => <option key={n} value={n}>{n}x</option>)}
+                             </select>
+                           </div>
+                           {parseInt(installments) > 1 && (
+                             <div className="col-span-2 flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 gap-1 mt-1">
+                               <button type="button" onClick={() => setAmountMode("total")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'total' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é o TOTAL</button>
+                               <button type="button" onClick={() => setAmountMode("installment")} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-colors ${amountMode === 'installment' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}>O valor R$ {amount} é a PARCELA</button>
+                             </div>
+                           )}
+                         </>
+                       )}
+
+                       {/* Se for PIX/Debito/Auto/Dinheiro -> Permite Repetição Mensal */}
+                       {(paymentMethod !== 'credit' && paymentMethod !== 'carne') && (
+                          <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-4 rounded-xl border border-zinc-800 mt-2">
+                             <div>
+                                <p className="text-sm font-bold text-white flex items-center gap-1.5"><Repeat className="w-4 h-4 text-indigo-500" /> Repetição Fixa</p>
+                                <p className="text-[9px] text-zinc-500 uppercase mt-0.5">Projetar meses futuros</p>
+                             </div>
+                             <input type="checkbox" checked={isRecurring} onChange={e=>setIsRecurring(e.target.checked)} className="w-5 h-5 accent-indigo-500 bg-zinc-900 border-zinc-700 rounded" />
+                          </div>
+                       )}
+                    </div>
+
+                    {isRecurring && (
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-2xl">
+                           <p className="text-[10px] text-indigo-400 font-bold uppercase mb-2">Por quantos meses quer projetar?</p>
+                           <select value={installments} onChange={(e) => setInstallments(e.target.value)} className="w-full bg-zinc-950 border border-indigo-500/30 rounded-xl px-4 py-3 text-sm text-indigo-300 outline-none appearance-none">
+                             <option value="1">Apenas este mês</option>
+                             <option value="6">Próximos 6 meses</option>
+                             <option value="12">Próximo 1 ano</option>
+                             <option value="24">Próximos 2 anos</option>
+                           </select>
+                        </div>
+                    )}
+
+                    {/* STATUS DE PREVISÃO (PREVISTO VS REALIZADO) */}
+                    {paymentMethod !== 'credit' && paymentMethod !== 'carne' && (
+                      <div className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 mt-4">
+                        <div>
+                          <p className="text-sm font-bold text-white flex items-center gap-1.5"><CheckCircle2 className={`w-4 h-4 ${isPaid ? 'text-emerald-500' : 'text-zinc-600'}`} /> Efetivado (Já pago)</p>
+                          <p className="text-[9px] text-zinc-500 uppercase mt-0.5">Desmarque para salvar como <span className="text-amber-500 font-bold">PREVISÃO</span></p>
+                        </div>
+                        <input type="checkbox" checked={isPaid} onChange={e=>setIsPaid(e.target.checked)} className="w-5 h-5 accent-emerald-500 bg-zinc-900 border-zinc-700 rounded" />
+                      </div>
+                    )}
+
+                    <div><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2 mt-4">Descrição (Opcional)</p><input type="text" placeholder="Ex: Conta de Luz Janeiro" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500/50" /></div>
                   </div>
                 )}
               </form>
