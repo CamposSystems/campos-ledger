@@ -7,19 +7,12 @@ import {
   Settings, LogOut, ChevronDown, Calendar, 
   CreditCard, Banknote, ShieldAlert, RefreshCw, X, Star,
   Eye, EyeOff, BarChart3, Bot, Send, Mic, Search, Bell, AlertTriangle,
-  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil, User
+  PieChart, BrainCircuit, Receipt, AlertCircle, Repeat, Users, Pencil, User, ChevronUp
 } from "lucide-react";
 
-/* =========================================================================
-   ⚠️ ATENÇÃO CHARLES: PARA O SEU VS CODE E VERCEL, USE AS IMPORTAÇÕES REAIS:
-   Descomente as duas linhas abaixo e apague o bloco MOCK a seguir.
-========================================================================= */
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
-
-
-// INICIALIZAÇÃO DO SUPABASE
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -46,6 +39,7 @@ export default function Dashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const [isBalanceHidden, setIsBalanceHidden] = useState(true);
+  const [showAccountsBreakdown, setShowAccountsBreakdown] = useState(false);
   
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustAccountId, setAdjustAccountId] = useState("");
@@ -239,7 +233,6 @@ export default function Dashboard() {
         rowStatus = (i === 0) ? (isPaid ? "completed" : "pending") : "pending";
       }
 
-      // Adiciona 'i' meses à data da compra para gerar as parcelas mensais na timeline
       rowDate.setMonth(rowDate.getMonth() + i);
       
       let rowDesc = description.trim() || (modalType === 'transfer' ? 'Transferência' : (selectedCat?.name || "Lançamento"));
@@ -433,10 +426,6 @@ export default function Dashboard() {
     let monthlyIncome = 0; 
     let monthlyExpense = 0; 
     let pendingExpense = 0;
-    let totalDeductions = 0;
-    const upcomingBills: any[] = []; 
-    const today = new Date();
-    today.setHours(0,0,0,0);
     
     transactions.forEach(t => {
       const val = Number(t.amount) || 0;
@@ -444,42 +433,37 @@ export default function Dashboard() {
         monthlyIncome += val; 
       } else { 
         monthlyExpense += val; 
-        
         if (t.status === 'pending') {
           pendingExpense += val;
-          const cleanDate = t.date.split('T')[0].split(' ')[0];
-          const txDate = new Date(cleanDate + "T12:00:00");
-          txDate.setHours(0,0,0,0);
-          const diffTime = txDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          if (diffDays >= 0 && diffDays <= 5) {
-            upcomingBills.push({ ...t, diffDays });
-          }
         } 
-        
-        if (t.is_payroll_deduction) totalDeductions += val;
       }
     });
-
-    const expectedIncome = 1500; 
-    const actualIncome = monthlyIncome;
-    const difference = actualIncome - expectedIncome;
-    const isWarning = actualIncome < expectedIncome && actualIncome > 0;
 
     return { 
       realBalance,
       monthlyIncome, 
       monthlyExpense, 
-      pendingExpense,
-      expectedIncome,
-      actualIncome,
-      totalDeductions,
-      difference,
-      isWarning,
-      upcomingBills: upcomingBills.sort((a,b) => a.diffDays - b.diffDays)
+      pendingExpense
     };
   }, [transactions, allTransactions, accounts]);
+
+  // Conta os saldos individuais de cada conta
+  const accountBalances = useMemo(() => {
+    const balances: Record<string, number> = {};
+    accounts.forEach(acc => balances[acc.id] = Number(acc.initial_balance) || 0);
+
+    allTransactions.forEach(t => {
+      if (t.payment_method === 'credit' || t.status !== 'completed' || !t.account_id) return;
+      const val = Number(t.amount) || 0;
+      if (t.type === 'income') balances[t.account_id] += val;
+      if (t.type === 'expense') balances[t.account_id] -= val;
+    });
+
+    return accounts.map(acc => ({
+      ...acc,
+      currentBalance: balances[acc.id] || 0
+    }));
+  }, [accounts, allTransactions]);
 
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
@@ -538,11 +522,15 @@ export default function Dashboard() {
         })
       });
 
-      if (!response.ok) throw new Error("Falha na API de envio.");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Falha desconhecida na API");
+      }
+      
       alert("Relatório Premium enviado para o seu e-mail com sucesso! Verifique a sua caixa de entrada.");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Erro ao enviar o e-mail. Verifique se configurou a API de e-mail.");
+      alert(`Erro ao enviar o e-mail: ${err.message}\nVerifique se as variáveis SMTP_EMAIL e SMTP_PASS estão configuradas na Vercel.`);
     } finally {
       setSendingEmail(false);
     }
@@ -600,44 +588,29 @@ export default function Dashboard() {
 
         <section className="space-y-3">
           
-          {calculations.upcomingBills.length > 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 mb-4 animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-5 h-5 text-yellow-500" />
-                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-500">Atenção! Vencimentos Próximos</h3>
-              </div>
-              <div className="space-y-2">
-                {calculations.upcomingBills.map(bill => (
-                  <div key={bill.id} className="flex justify-between items-center bg-zinc-950/50 p-2.5 rounded-xl border border-yellow-500/10">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-white truncate">{bill.description}</p>
-                      <p className="text-[9px] text-yellow-400 uppercase font-medium mt-0.5">
-                        {bill.diffDays === 0 ? "Vence HOJE!" : `Vence em ${bill.diffDays} dia(s)`}
-                      </p>
-                    </div>
-                    <p className="text-sm font-black text-yellow-500 shrink-0 ml-2">R$ {Number(bill.amount).toFixed(2)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-zinc-900 rounded-[2rem] p-6 border border-zinc-800 relative overflow-hidden group">
+          <div 
+            onClick={() => setShowAccountsBreakdown(!showAccountsBreakdown)}
+            className="cursor-pointer bg-zinc-900 rounded-[2rem] p-6 border border-zinc-800 relative overflow-hidden group transition-all"
+          >
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
             
             <div className="flex items-start justify-between relative z-10">
               <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.2em] flex items-center gap-2">
                 <Wallet className="w-3 h-3" /> Saldo Real Consolidado
               </p>
-              <button 
-                onClick={() => {
-                  setAdjustAccountId(accounts[0]?.id || "");
-                  setShowAdjustModal(true);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-800 text-zinc-300 text-[9px] uppercase font-black tracking-widest px-2 py-1 rounded"
-              >
-                Ajustar
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAdjustAccountId(accounts[0]?.id || "");
+                    setShowAdjustModal(true);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-800 text-zinc-300 text-[9px] uppercase font-black tracking-widest px-2 py-1 rounded"
+                >
+                  Ajustar
+                </button>
+                {showAccountsBreakdown ? <ChevronUp className="w-4 h-4 text-zinc-500"/> : <ChevronDown className="w-4 h-4 text-zinc-500"/>}
+              </div>
             </div>
 
             <h2 className={`text-4xl sm:text-5xl font-black mt-2 tracking-tighter relative z-10 ${calculations.realBalance >= 0 ? 'text-white' : 'text-red-400'}`}>
@@ -645,12 +618,16 @@ export default function Dashboard() {
               {maskValue(calculations.realBalance)}
             </h2>
             
-            {calculations.pendingExpense > 0 && (
-              <div className="mt-4 flex items-center gap-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-3 py-1.5 rounded-lg w-fit relative z-10">
-                <Clock className="w-3 h-3" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">
-                  R$ {maskValue(calculations.pendingExpense)} Pendentes este mês
-                </span>
+            {showAccountsBreakdown && (
+              <div className="mt-6 pt-4 border-t border-zinc-800/50 space-y-3 relative z-10 animate-in fade-in slide-in-from-top-2">
+                {accountBalances.map(acc => (
+                  <div key={acc.id} className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-zinc-400 flex items-center gap-2"><Banknote className="w-3 h-3"/> {acc.name}</span>
+                    <span className={`text-xs font-black ${acc.currentBalance >= 0 ? 'text-white' : 'text-red-400'}`}>
+                      R$ {maskValue(acc.currentBalance)}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -676,26 +653,6 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-
-          {calculations.isWarning && (
-            <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 mt-3 animate-in fade-in zoom-in">
-              <AlertTriangle className="text-red-500 w-6 h-6 shrink-0" />
-              <div>
-                <p className="text-[11px] font-black tracking-widest text-red-400 uppercase mb-0.5">Alerta de Rendimento</p>
-                <p className="text-sm font-bold text-white tracking-tight">
-                  Previsão: R$ {maskValue(calculations.expectedIncome)} <span className="text-zinc-500 mx-1">|</span> Recebido: R$ {maskValue(calculations.actualIncome)}
-                </p>
-                <p className="text-[10px] text-red-300 font-black tracking-widest uppercase mt-1">
-                  Faltam R$ {maskValue(Math.abs(calculations.difference))} este mês!
-                </p>
-                {calculations.totalDeductions > 0 && (
-                  <p className="text-[10px] text-zinc-400 font-medium mt-1 border-t border-red-500/20 pt-1">
-                    Isso inclui R$ {maskValue(calculations.totalDeductions)} de descontos em folha.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-3 gap-2 mt-3">
              <button onClick={() => router.push("/planejamento")} className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-3xl p-4 flex flex-col items-center justify-center gap-2 transition group shadow-lg">
@@ -788,7 +745,7 @@ export default function Dashboard() {
                                 </p>
                               )}
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'textemerald-500' : 'text-zinc-500'}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isIncome ? 'text-emerald-500' : 'text-zinc-500'}`}>
                                   {catInfo?.name || "Transferência"}
                                 </span>
                                 <span className="text-[8px] bg-zinc-800/50 text-zinc-400 px-1.5 py-0.5 rounded-md flex items-center gap-1">
@@ -983,6 +940,9 @@ export default function Dashboard() {
                 }
               }} className="space-y-8">
                 
+                {/* =======================
+                    PASSO 1: VALOR E CATEGORIA 
+                    ======================= */}
                 {modalStep === 1 && (
                   <div className="animate-in slide-in-from-left-4 fade-in">
                     <div className="flex bg-zinc-900 p-1.5 rounded-2xl mb-8">
@@ -1073,9 +1033,13 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* =======================
+                    PASSO 2: PAGAMENTO E DATAS 
+                    ======================= */}
                 {modalStep === 2 && (
                   <div className="animate-in slide-in-from-right-4 fade-in space-y-6">
                     
+                    {/* 1. SELEÇÃO DE MÉTODO DE PAGAMENTO MASTER */}
                     <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
                        <p className="text-[10px] text-zinc-400 font-bold uppercase mb-3">Método de Pagamento</p>
                        <select value={paymentMethod} onChange={(e) => {
@@ -1091,6 +1055,7 @@ export default function Dashboard() {
                        </select>
                     </div>
 
+                    {/* 2. CONTA OU CARTÃO ALVO */}
                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
                         <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">{paymentMethod === 'credit' ? 'Qual Cartão?' : 'Debitar/Creditar em qual conta?'}</p>
                         {paymentMethod === 'credit' ? (
@@ -1106,9 +1071,11 @@ export default function Dashboard() {
                         )}
                     </div>
 
+                    {/* 3. DATAS E PARCELAS/PREVISÕES */}
                     <div className="grid grid-cols-2 gap-3">
                        <div className="col-span-2"><p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Data da Compra / Vencimento</p><input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white outline-none" /></div>
                        
+                       {/* Se for Crédito ou Carnê -> Permite Parcelar */}
                        {(paymentMethod === 'credit' || paymentMethod === 'carne') && (
                          <>
                            <div className="col-span-2">
@@ -1124,6 +1091,7 @@ export default function Dashboard() {
                          </>
                        )}
 
+                       {/* Se for PIX/Debito/Auto/Dinheiro -> Permite Repetição Mensal */}
                        {(paymentMethod !== 'credit' && paymentMethod !== 'carne') && (
                           <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-4 rounded-xl border border-zinc-800 mt-2">
                              <div>
@@ -1142,6 +1110,7 @@ export default function Dashboard() {
                         </div>
                     )}
 
+                    {/* STATUS DE PREVISÃO (PREVISTO VS REALIZADO) */}
                     {paymentMethod !== 'credit' && paymentMethod !== 'carne' && (
                       <div className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 mt-4">
                         <div>
