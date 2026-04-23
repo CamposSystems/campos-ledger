@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { createClient } from "@supabase/supabase-js";
 
-const SMTP_EMAIL = process.env.SMTP_EMAIL || "camp.os.alertas@gmail.com";
+const SMTP_EMAIL = process.env.SMTP_EMAIL || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -15,6 +15,10 @@ export async function POST(req: Request) {
     
     if (!to || !family_id) {
       return NextResponse.json({ error: 'Faltam dados obrigatórios.' }, { status: 400 });
+    }
+
+    if (!SMTP_EMAIL || !SMTP_PASS) {
+      return NextResponse.json({ error: 'Missing credentials for "PLAIN". Configure SMTP_EMAIL e SMTP_PASS na Vercel.' }, { status: 500 });
     }
 
     const dateObj = new Date();
@@ -41,11 +45,12 @@ export async function POST(req: Request) {
     const expenseByCategory: Record<string, number> = {};
     const expenseByCard: Record<string, number> = {};
     
-    // Arrays para visão semanal
-    let week1 = 0; 
-    let week2 = 0; 
-    let week3 = 0; 
-    let week4 = 0;
+    let week1 = 0; let week2 = 0; let week3 = 0; let week4 = 0;
+    
+    // MOTOR DE ALERTAS DE VENCIMENTO
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const upcomingBills: any[] = [];
 
     transactions.forEach(tx => {
       const val = Number(tx.amount) || 0;
@@ -55,29 +60,56 @@ export async function POST(req: Request) {
       } else if (tx.type === 'expense') {
         totalExpense += val;
         
-        // Agrupa Semanas
+        // Separação Semanal
         const day = new Date(tx.date).getDate();
-        if (day <= 7) {
-          week1 += val;
-        } else if (day <= 14) {
-          week2 += val;
-        } else if (day <= 21) {
-          week3 += val;
-        } else {
-          week4 += val;
-        }
+        if (day <= 7) week1 += val;
+        else if (day <= 14) week2 += val;
+        else if (day <= 21) week3 += val;
+        else week4 += val;
 
-        // Agrupa por Categoria
         const catName = categories.find(c => c.id === tx.category_id)?.name || 'Gerais';
         expenseByCategory[catName] = (expenseByCategory[catName] || 0) + val;
 
-        // Agrupa por Cartão
         if (tx.payment_method === 'credit' && tx.credit_card_id) {
           const cardName = cards.find(c => c.id === tx.credit_card_id)?.name || 'Cartão Deletado';
           expenseByCard[cardName] = (expenseByCard[cardName] || 0) + val;
         }
+
+        // Verifica se é um vencimento próximo (Carnê, Boleto, etc)
+        if (tx.status === 'pending') {
+          const cleanDate = tx.date.split('T')[0].split(' ')[0];
+          const txDate = new Date(cleanDate + "T12:00:00");
+          txDate.setHours(0,0,0,0);
+          const diffDays = Math.ceil((txDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (diffDays >= 0 && diffDays <= 5) {
+            upcomingBills.push({ ...tx, diffDays });
+          }
+        }
       }
     });
+
+    upcomingBills.sort((a,b) => a.diffDays - b.diffDays);
+
+    let alertsHTML = "";
+    if (upcomingBills.length > 0) {
+      alertsHTML = `
+        <div style="background-color: #451a03; border: 1px solid #78350f; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+          <h3 style="color: #fbbf24; font-size: 14px; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">⚠️ Alerta de Vencimentos</h3>
+          ${upcomingBills.map(bill => `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #78350f; padding: 8px 0;">
+              <div>
+                <p style="margin: 0; color: #fef3c7; font-size: 14px; font-weight: bold;">${bill.description}</p>
+                <p style="margin: 0; color: #f59e0b; font-size: 10px; text-transform: uppercase;">
+                  ${bill.diffDays === 0 ? "VENCE HOJE!" : `Vence em ${bill.diffDays} dia(s)`}
+                </p>
+              </div>
+              <p style="margin: 0; color: #fbbf24; font-size: 14px; font-weight: bold;">R$ ${Number(bill.amount).toFixed(2)}</p>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
 
     const weeklyHTML = `
       <div style="display: flex; gap: 8px; margin-bottom: 24px;">
@@ -126,6 +158,8 @@ export async function POST(req: Request) {
           <p style="color: #a1a1aa; font-size: 14px; margin: 0;">Resumo financeiro de ${name}</p>
         </div>
         
+        ${alertsHTML}
+        
         <div style="background-color: #18181b; border: 1px solid #27272a; border-radius: 16px; padding: 24px; margin-bottom: 24px;">
           <div style="display: flex; justify-content: space-between;">
             <div>
@@ -171,7 +205,7 @@ export async function POST(req: Request) {
     await transporter.sendMail({ 
       from: `"Camp.OS Ledger" <${SMTP_EMAIL}>`, 
       to, 
-      subject: subject || "Relatório Financeiro Semanal e Mensal", 
+      subject: subject || "Relatório Financeiro e Alertas", 
       html: htmlTemplate 
     });
 
