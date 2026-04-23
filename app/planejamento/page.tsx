@@ -9,8 +9,6 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
-
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -126,10 +124,10 @@ export default function PlanejamentoPage() {
 
   // MOTOR INTELIGENTE DE AGRUPAMENTO (Pai/Filho) E COMPARAÇÃO DE RENDA/GASTOS
   const { macroStats, groupedExpenses, groupedIncomes } = useMemo(() => {
-    let totalPlannedIncome = 0;
-    let totalRealIncome = 0;
-    let totalPlannedExpense = 0;
-    let totalRealExpense = 0;
+    let tPI = 0; // Total Planned Income
+    let tRI = 0; // Total Real Income
+    let tPE = 0; // Total Planned Expense
+    let tRE = 0; // Total Real Expense
 
     const buildStats = (type: "expense" | "income") => {
       const typeCats = categories.filter(c => c.type === type);
@@ -151,11 +149,11 @@ export default function PlanejamentoPage() {
           familyReal += real;
           
           if(type === 'income') {
-            totalPlannedIncome += planned;
-            totalRealIncome += real;
+            tPI += planned;
+            tRI += real;
           } else {
-            totalPlannedExpense += planned;
-            totalRealExpense += real;
+            tPE += planned;
+            tRE += real;
           }
 
           const percentage = planned > 0 ? (real / planned) * 100 : (real > 0 ? 100 : 0);
@@ -185,14 +183,20 @@ export default function PlanejamentoPage() {
       }).filter(g => g.children.length > 0 || g.familyPlanned > 0 || g.familyReal > 0);
     };
 
+    // A ordem de execução importa aqui para garantir que tPI, tPE sejam somados ANTES de formar o macroStats
+    const expStats = buildStats("expense");
+    const incStats = buildStats("income");
+
     return {
       macroStats: {
-        totalPlannedIncome, totalRealIncome,
-        totalPlannedExpense, totalRealExpense,
-        plannedBalance: totalPlannedIncome - totalPlannedExpense
+        totalPlannedIncome: tPI, 
+        totalRealIncome: tRI,
+        totalPlannedExpense: tPE, 
+        totalRealExpense: tRE,
+        plannedBalance: tPI - tPE
       },
-      groupedExpenses: buildStats("expense"),
-      groupedIncomes: buildStats("income")
+      groupedExpenses: expStats,
+      groupedIncomes: incStats
     };
   }, [categories, transactions]);
 
