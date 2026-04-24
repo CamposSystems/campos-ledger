@@ -509,20 +509,20 @@ export default function Dashboard() {
     
     setSendingEmail(true);
     try {
+      // Pega a chave de acesso do utilizador atual
+      const { data: { session } } = await supabase.auth.getSession();
+
       const response = await fetch('/api/send-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}` // Envia a chave
+        },
         body: JSON.stringify({
           to: userProfile.email,
-          subject: `📊 Relatório Camp.OS Ledger - ${MESES[currentDate.getMonth()]} ${currentDate.getFullYear()}`,
+          family_id: userProfile.family_id, // Garante que não falta este dado!
           name: userProfile.display_name?.split(' ')[0] || 'Usuário',
-          balance: calculations.realBalance,
-          income: calculations.monthlyIncome,
-          expense: calculations.monthlyExpense,
-          // O SEGREDO ESTÁ AQUI: Enviamos os dados que já estão carregados na sua tela
-          transactions: transactions, 
-          categories: categories,
-          creditCards: creditCards
+          subject: `📊 Relatório Camp.OS Ledger - ${MESES[currentDate.getMonth()]} ${currentDate.getFullYear()}`
         })
       });
 
@@ -531,7 +531,7 @@ export default function Dashboard() {
         throw new Error(errorData.error || "Falha desconhecida na API");
       }
       
-      alert("Relatório Premium enviado com sucesso! Verifique a sua caixa de entrada.");
+      alert("Relatório Premium enviado para o seu e-mail com sucesso! Verifique a sua caixa de entrada.");
     } catch (err: any) {
       console.error(err);
       alert(`Erro ao enviar o e-mail: ${err.message}`);
