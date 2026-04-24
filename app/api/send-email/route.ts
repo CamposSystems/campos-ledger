@@ -7,10 +7,12 @@ const SMTP_PASS = process.env.SMTP_PASS || "";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function POST(req: Request) {
   try {
+    // 1. O SEGREDO ESTÁ AQUI: Captura o token de autenticação enviado pelo frontend
+    const authHeader = req.headers.get('authorization');
+
     const { to, subject, name, family_id } = await bodyParse(req);
     
     if (!to || !family_id) {
@@ -20,6 +22,15 @@ export async function POST(req: Request) {
     if (!SMTP_EMAIL || !SMTP_PASS) {
       return NextResponse.json({ error: 'Missing credentials for "PLAIN". Configure SMTP_EMAIL e SMTP_PASS na Vercel.' }, { status: 500 });
     }
+
+    // 2. Inicializa o Supabase USANDO o token do utilizador (Isto fura o bloqueio RLS e resolve o problema dos zeros)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader || ''
+        }
+      }
+    });
 
     const dateObj = new Date();
     const startOfMonth = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1).toISOString();
@@ -203,7 +214,7 @@ export async function POST(req: Request) {
     });
 
     await transporter.sendMail({ 
-      from: `"Camp.OS Ledger" <${SMTP_EMAIL}>`, 
+      from: \`"Camp.OS Ledger" <\${SMTP_EMAIL}>\`, 
       to, 
       subject: subject || "Relatório Financeiro e Alertas", 
       html: htmlTemplate 

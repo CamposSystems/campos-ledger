@@ -14,7 +14,6 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
 
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -515,12 +514,15 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: userProfile.email,
-          family_id: userProfile.family_id,
-          subject: `📊 Seu Relatório Camp.OS Ledger - ${new Date().toLocaleDateString('pt-BR')}`,
+          subject: `📊 Relatório Camp.OS Ledger - ${MESES[currentDate.getMonth()]} ${currentDate.getFullYear()}`,
           name: userProfile.display_name?.split(' ')[0] || 'Usuário',
-          balance: calculations.realBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
-          income: calculations.monthlyIncome.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
-          expense: calculations.monthlyExpense.toLocaleString('pt-BR', {minimumFractionDigits: 2})
+          balance: calculations.realBalance,
+          income: calculations.monthlyIncome,
+          expense: calculations.monthlyExpense,
+          // O SEGREDO ESTÁ AQUI: Enviamos os dados que já estão carregados na sua tela
+          transactions: transactions, 
+          categories: categories,
+          creditCards: creditCards
         })
       });
 
@@ -529,10 +531,10 @@ export default function Dashboard() {
         throw new Error(errorData.error || "Falha desconhecida na API");
       }
       
-      alert("Relatório Premium enviado para o seu e-mail com sucesso! Verifique a sua caixa de entrada.");
+      alert("Relatório Premium enviado com sucesso! Verifique a sua caixa de entrada.");
     } catch (err: any) {
       console.error(err);
-      alert(`Erro ao enviar o e-mail: ${err.message}\nVerifique se as variáveis SMTP_EMAIL e SMTP_PASS estão configuradas na Vercel.`);
+      alert(`Erro ao enviar o e-mail: ${err.message}`);
     } finally {
       setSendingEmail(false);
     }
