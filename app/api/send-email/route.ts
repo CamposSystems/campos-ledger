@@ -93,31 +93,39 @@ export async function POST(req: Request) {
           txDate.setHours(0,0,0,0);
           const diffDays = Math.ceil((txDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (diffDays >= 0 && diffDays <= 5) {
+          if (diffDays >= -15 && diffDays <= 5) {
             upcomingBills.push({ ...tx, diffDays });
           }
         }
       }
     });
 
-    upcomingBills.sort((a,b) => a.diffDays - b.diffDays);
+    upcomingBills.sort((a: any, b: any) => a.diffDays - b.diffDays);
 
     let alertsHTML = "";
     if (upcomingBills.length > 0) {
       alertsHTML = `
         <div style="background-color: #451a03; border: 1px solid #78350f; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
-          <h3 style="color: #fbbf24; font-size: 14px; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">⚠️ Alerta de Vencimentos</h3>
-          ${upcomingBills.map(bill => `
+          <h3 style="color: #fbbf24; font-size: 14px; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">⚠️ Alertas Pendentes</h3>
+          ${upcomingBills.map(bill => {
+            let statusText = "";
+            let colorText = "";
+            if (bill.diffDays === 0) { statusText = "VENCE HOJE!"; colorText = "#ef4444"; }
+            else if (bill.diffDays < 0) { statusText = `ATRASADO ${Math.abs(bill.diffDays)} DIA(S)`; colorText = "#ef4444"; }
+            else { statusText = `Vence em ${bill.diffDays} dia(s)`; colorText = "#f59e0b"; }
+
+            return `
             <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #78350f; padding: 8px 0;">
               <div>
                 <p style="margin: 0; color: #fef3c7; font-size: 14px; font-weight: bold;">${bill.description}</p>
-                <p style="margin: 0; color: #f59e0b; font-size: 10px; text-transform: uppercase;">
-                  ${bill.diffDays === 0 ? "VENCE HOJE!" : `Vence em ${bill.diffDays} dia(s)`}
+                <p style="margin: 0; color: ${colorText}; font-size: 10px; text-transform: uppercase; font-weight: bold;">
+                  ${statusText}
                 </p>
               </div>
               <p style="margin: 0; color: #fbbf24; font-size: 14px; font-weight: bold;">R$ ${Number(bill.amount).toFixed(2)}</p>
             </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       `;
     }
@@ -214,7 +222,7 @@ export async function POST(req: Request) {
     });
 
     await transporter.sendMail({ 
-      from: \`"Camp.OS Ledger" <\${SMTP_EMAIL}>\`, 
+      from: `"Camp.OS Ledger" <${SMTP_EMAIL}>`, 
       to, 
       subject: subject || "Relatório Financeiro e Alertas", 
       html: htmlTemplate 
